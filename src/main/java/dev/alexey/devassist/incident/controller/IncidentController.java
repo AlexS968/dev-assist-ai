@@ -29,14 +29,16 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class IncidentController {
 
 	private final IncidentService service;
+	private final IncidentMapper mapper;
 
-	public IncidentController(IncidentService service) {
+	public IncidentController(IncidentService service, IncidentMapper mapper) {
 		this.service = service;
+		this.mapper = mapper;
 	}
 
 	@PostMapping
 	public ResponseEntity<IncidentResponseDTO> create(@Valid @RequestBody CreateIncidentRequestDTO request) {
-		IncidentResponseDTO response = IncidentMapper.toResponse(
+		IncidentResponseDTO response = mapper.toResponse(
 				service.create(request.title(), request.description(), request.source()));
 		URI location = ServletUriComponentsBuilder.fromCurrentRequest()
 				.path("/{id}")
@@ -47,19 +49,19 @@ public class IncidentController {
 
 	@GetMapping("/{id}")
 	public IncidentResponseDTO findById(@PathVariable UUID id) {
-		return IncidentMapper.toResponse(service.findById(id));
+		return mapper.toResponse(service.findById(id));
 	}
 
 	@GetMapping
 	public IncidentPageResponseDTO findAll(
 			@RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-		return IncidentMapper.toPageResponse(service.findAll(page, size));
+		return mapper.toPageResponse(service.findAll(page, size));
 	}
 
 	@PatchMapping("/{id}/status")
 	public IncidentResponseDTO updateStatus(@PathVariable UUID id,
 			@Valid @RequestBody UpdateIncidentStatusRequestDTO request) {
-		return IncidentMapper.toResponse(service.updateStatus(id, request.status()));
+		return mapper.toResponse(service.updateStatus(id, request.status()));
 	}
 }
