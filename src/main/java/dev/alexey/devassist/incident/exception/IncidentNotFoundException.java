@@ -1,7 +1,5 @@
 package dev.alexey.devassist.incident.exception;
 
-import dev.alexey.devassist.incident.entity.Incident;
-
 import java.util.UUID;
 
 public class IncidentNotFoundException extends RuntimeException {
