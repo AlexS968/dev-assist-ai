@@ -1,4 +1,8 @@
-package dev.alexey.devassist.incident;
+package dev.alexey.devassist.incident.repository;
+
+import dev.alexey.devassist.incident.entity.Incident;
+import dev.alexey.devassist.incident.entity.IncidentSource;
+import dev.alexey.devassist.incident.entity.IncidentStatus;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;

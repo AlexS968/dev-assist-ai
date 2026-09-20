@@ -1,4 +1,6 @@
-package dev.alexey.devassist.incident;
+package dev.alexey.devassist.incident.repository;
+
+import dev.alexey.devassist.incident.entity.Incident;
 
 import java.util.UUID;
 

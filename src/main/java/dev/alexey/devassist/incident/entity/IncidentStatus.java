@@ -1,4 +1,4 @@
-package dev.alexey.devassist.incident;
+package dev.alexey.devassist.incident.entity;
 
 public enum IncidentStatus {
 	NEW,
