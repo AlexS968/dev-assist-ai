@@ -1,6 +1,6 @@
 package dev.alexey.devassist.incident.dto;
 
-import dev.alexey.devassist.incident.entity.IncidentSource;
+import dev.alexey.devassist.incident.enums.IncidentSource;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

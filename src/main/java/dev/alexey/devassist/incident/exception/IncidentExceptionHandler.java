@@ -11,6 +11,11 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @RestControllerAdvice(assignableTypes = IncidentController.class)
 public class IncidentExceptionHandler extends ResponseEntityExceptionHandler {
 
+	@ExceptionHandler(InvalidIncidentStatusTransitionException.class)
+	public ProblemDetail handleInvalidStatusTransition(InvalidIncidentStatusTransitionException exception) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+	}
+
 	@ExceptionHandler(IncidentNotFoundException.class)
 	public ProblemDetail handleIncidentNotFound(IncidentNotFoundException exception) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());

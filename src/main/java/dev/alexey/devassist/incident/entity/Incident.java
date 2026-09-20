@@ -1,5 +1,8 @@
 package dev.alexey.devassist.incident.entity;
 
+import dev.alexey.devassist.incident.enums.IncidentSource;
+import dev.alexey.devassist.incident.enums.IncidentStatus;
+
 import java.time.Instant;
 import java.util.UUID;
 
