@@ -1,0 +1,14 @@
+target/
+.git/
+.github/
+.idea/
+.env
+.env.*
+!.env.example
+*.iml
+*.log
+.DS_Store
+docs/
+requests/
+compose.yaml
+README.md
