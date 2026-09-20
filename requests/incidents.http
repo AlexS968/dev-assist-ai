@@ -1,0 +1,77 @@
+@baseUrl = http://localhost:8080
+
+### 1. Create an incident and save its ID
+POST {{baseUrl}}/api/v1/incidents
+Content-Type: application/json
+
+{
+  "title": "Database connection timeout",
+  "description": "Checkout requests fail with database connection timeouts.",
+  "source": "MANUAL"
+}
+
+> {%
+    client.test("Incident created", function () {
+        client.assert(response.status === 201, "Expected 201 Created");
+        client.assert(response.body.status === "NEW", "Expected NEW status");
+    });
+    if (response.status === 201) {
+        client.global.set("incidentId", response.body.id);
+    }
+%}
+
+### 2. Get the created incident
+GET {{baseUrl}}/api/v1/incidents/{{incidentId}}
+
+### 3. List incidents (newest first)
+GET {{baseUrl}}/api/v1/incidents?page=0&size=20
+
+### 4. NEW -> IN_PROGRESS
+PATCH {{baseUrl}}/api/v1/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{"status": "IN_PROGRESS"}
+
+> {%
+    client.test("Investigation started", function () {
+        client.assert(response.status === 200, "Expected 200 OK");
+        client.assert(response.body.status === "IN_PROGRESS", "Expected IN_PROGRESS");
+    });
+%}
+
+### 5. IN_PROGRESS -> RESOLVED
+PATCH {{baseUrl}}/api/v1/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{"status": "RESOLVED"}
+
+> {%
+    client.test("Incident resolved", function () {
+        client.assert(response.status === 200, "Expected 200 OK");
+        client.assert(response.body.status === "RESOLVED", "Expected RESOLVED");
+    });
+%}
+
+### 6. Forbidden transition: RESOLVED -> IN_PROGRESS (409)
+PATCH {{baseUrl}}/api/v1/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{"status": "IN_PROGRESS"}
+
+> {%
+    client.test("Forbidden transition rejected", function () {
+        client.assert(response.status === 409, "Expected 409 Conflict");
+    });
+%}
+
+### 7. Validation error: blank title (400)
+POST {{baseUrl}}/api/v1/incidents
+Content-Type: application/json
+
+{"title": "", "description": "Checkout failures", "source": "MANUAL"}
+
+> {%
+    client.test("Invalid incident rejected", function () {
+        client.assert(response.status === 400, "Expected 400 Bad Request");
+    });
+%}

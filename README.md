@@ -106,6 +106,25 @@ docker compose down
 The named PostgreSQL volume is preserved by `docker compose down`. Do not add
 the `--volumes` option unless the local database should intentionally be deleted.
 
+## API documentation
+
+Start PostgreSQL, then run the application:
+
+```bash
+docker compose up -d
+./mvnw spring-boot:run
+```
+
+- [Swagger UI](http://localhost:8080/swagger-ui.html)
+- [OpenAPI JSON](http://localhost:8080/v3/api-docs)
+
+For manual checks, open [requests/incidents.http](requests/incidents.http) in
+IntelliJ IDEA with HTTP Client support. Run the requests from top to bottom using
+the gutter Run icons, or use Run All Requests. The creation request stores the
+incident ID in `client.global`; subsequent requests reuse it. Re-run the scenario
+from creation to obtain a fresh incident. The final two requests intentionally
+return 409 and 400.
+
 ## Running tests
 
 Docker must be running because integration tests use Testcontainers.
