@@ -105,6 +105,12 @@ The integration spike must demonstrate:
 
 ## Revisit when
 
+Phase 2 infrastructure step (2026-09-27): Spring AI 2.0.1 and the official
+OpenAI starter are wired behind `IncidentAnalysisGateway`. Offline unit/context
+tests cover construction and configuration; no live model call has been made.
+See [implementation boundaries](../architecture/ai-integration.md). This is
+partial validation only, so the status remains `Proposed`.
+
 Change the status to `Accepted` after the integration spike satisfies the
 validation criteria. Reject or supersede this ADR if Spring AI cannot meet the
 required behavior without excessive workarounds.

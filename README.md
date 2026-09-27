@@ -13,11 +13,13 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 0 — Engineering foundation**
+**Phase 2 — LLM integration, infrastructure step**
 
 Currently implemented:
 
-- Java 21 and Spring Boot 4;
+- Java 21 and Spring Boot 4.1.1;
+- incident creation, retrieval, listing and status API;
+- Spring AI 2.0.1 OpenAI adapter and offline tests;
 - PostgreSQL;
 - Flyway migrations;
 - Docker Compose development database;
@@ -27,7 +29,8 @@ Currently implemented:
 - non-root runtime container;
 - GitHub Actions CI.
 
-The incident API and AI capabilities are not implemented yet.
+The incident REST API is implemented. OpenAI infrastructure is configured behind
+an application gateway, but no REST operation invokes it yet.
 
 ## Technology
 
@@ -40,8 +43,8 @@ The incident API and AI capabilities are not implemented yet.
 - Testcontainers
 - GitHub Actions
 
-Spring AI is the proposed AI framework and will be validated during the first
-LLM integration phase.
+Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
+until the later integration spike validates real provider behavior.
 
 ## Architecture
 
@@ -76,7 +79,7 @@ Check its status:
 docker compose ps
 ```
 
-Run the application:
+Provide `OPENAI_API_KEY` in your shell or IDE environment, then run the application:
 
 ```bash
 ./mvnw spring-boot:run
@@ -162,10 +165,25 @@ Local defaults are provided for development:
 | `DB_URL` | `jdbc:postgresql://localhost:5432/dev_assist` |
 | `DB_USERNAME` | `dev_assist` |
 | `DB_PASSWORD` | `dev_assist` |
+| `OPENAI_API_KEY` | Required; no production default |
+| `OPENAI_MODEL` | `gpt-6-luna` |
 
 The defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
 a secrets manager.
+
+Application-owned `app.ai.model` binds `OPENAI_MODEL` and supplies
+`spring.ai.openai.chat.model`. The key is read directly from `OPENAI_API_KEY`;
+it is never stored in application properties or logged by application code.
+`.env.example` contains a fictional key. Spring Boot does not load `.env`
+automatically: export the variables or configure them in your IDE.
+
+Only the chat model is enabled. SDK retries are disabled for this step. Startup
+constructs the client but does not contact OpenAI. All tests use a fictional key
+and a loopback base URL; gateway unit tests use a mocked model. No OpenAI account
+or tokens are required for `./mvnw clean verify`.
+
+See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
 
 ## Roadmap
 
@@ -185,10 +203,10 @@ AI capabilities are added only when they solve a concrete product problem.
 
 ## Known limitations
 
-The current phase provides infrastructure only.
+The current AI step provides infrastructure only.
 
-- no incident REST endpoints;
-- no LLM integration;
+- no AI analysis endpoint or service orchestration;
+- real model availability and response behavior have not been validated;
 - no authentication or authorization;
 - no vector search;
 - no operational tools;

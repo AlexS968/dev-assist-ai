@@ -2,6 +2,21 @@ spring:
   application:
     name: dev-assist-ai
 
+  ai:
+    model:
+      chat: openai
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      max-retries: 0
+      chat:
+        model: ${app.ai.model}
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/dev_assist}
     username: ${DB_USERNAME:dev_assist}
@@ -14,6 +29,10 @@ spring:
 
   flyway:
     enabled: true
+
+app:
+  ai:
+    model: ${OPENAI_MODEL:gpt-6-luna}
 
 management:
   endpoints:
