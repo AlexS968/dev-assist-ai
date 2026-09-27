@@ -1,34 +1,51 @@
-# Phase 2: AI infrastructure
+# Phase 2: incident analysis
 
-This step wires an OpenAI adapter without connecting it to IncidentController or
-IncidentService. There are no startup runners or real API calls in tests.
+`POST /api/v1/incidents/{id}/analysis` generates a synchronous analysis for an
+existing incident. The request has no body. It returns 200 with content, provider,
+model, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
+An unknown UUID returns the existing 404 ProblemDetail; provider failures and
+null/empty/blank content return a sanitized 502 ProblemDetail. No analysis is saved.
 
 ## Components and boundary
 
-- `IncidentAnalysisGateway`: application-owned API for a future analysis service;
-  accepts an incident snapshot and returns plain text, with no Spring AI types.
-- `IncidentAnalysisInput`: immutable title/description snapshot. It does not expose
-  the JPA entity or require loading persistence in adapter tests.
-- `OpenAiIncidentAnalysisGateway`: constructor-injected adapter around ChatClient.
-  Maps incident content into a user message and supplies a separate system message.
-  Only an explicit `analyze` invocation calls the model.
-- `AiConfiguration`: wires the adapter to the starter's OpenAiChatModel and
-  registers configuration properties. No business service depends on this class.
-- `AiProperties`: validates the application-owned `app.ai.model` setting.
-  YAML maps `OPENAI_MODEL` (default `gpt-6-luna`) into this setting and forwards it
-  to `spring.ai.openai.chat.model`. Secrets are not part of this record.
-
-Future dependency direction:
+- `IncidentApi` declares the HTTP and OpenAPI contract. `IncidentController` only
+  delegates to services; it has no mapper, repository or gateway dependency.
+- `IncidentAnalysisService` loads the incident, creates an immutable title/description
+  snapshot, invokes `IncidentAnalysisGateway`, and maps the result to the response DTO.
+- `IncidentMapper` maps both existing incident responses and analysis results.
+  Existing incident response mapping now takes place in `IncidentService`.
+- `IncidentAnalysisInput` and `IncidentAnalysisResult` are application value objects;
+  the latter carries plain text and metadata, with no framework/provider types.
+- `OpenAiIncidentAnalysisGateway` isolates Spring AI, builds separate system/user
+  messages, and reads content, actual model and usage from ChatResponse. If no model
+  is reported, the configured model is returned. EmptyUsage becomes null counts;
+  reported zero counts remain zero. Missing totals are not calculated by the adapter.
+- `IncidentAnalysisException` wraps provider failures. Its distinct subtype
+  `EmptyIncidentAnalysisException` represents empty content. The HTTP handler always
+  emits a fixed public message, never the provider exception, cause, key or prompt.
+- `AiConfiguration` supplies the model, configured model name, UTC Clock and a
+  monotonic nanosecond supplier through constructor injection. `AiProperties`
+  validates the application-owned model configuration.
 
 ```text
-analysis service -> IncidentAnalysisGateway <- OpenAiIncidentAnalysisGateway
-                                                   -> Spring AI -> OpenAI
+IncidentController -> IncidentAnalysisService -> IncidentRepository
+                                 |
+                                 v
+                      IncidentAnalysisGateway <- OpenAiIncidentAnalysisGateway
+                                                           -> Spring AI -> OpenAI
 ```
 
-The future service can substitute a fake gateway without any provider imports.
-The current adapter returns unstructured text. Provider error translation and
-response validation are deliberately deferred with orchestration; callers should
-not yet depend on a stable error contract.
+The analysis service uses `Propagation.NOT_SUPPORTED` to suspend any caller
+transaction. Repository `findById` finishes its own read transaction before the
+model is called. Open-in-view remains disabled. No DB transaction is active during
+the network call; an outer caller transaction, if any, resumes on return. A caller
+should avoid holding its own transaction while waiting for analysis, since suspended
+transactions can still retain resources. Analysis uses a snapshot: later incident
+updates are not reflected in an already-running request.
+
+`generatedAt` is the application receipt time in UTC. `latencyMs` measures the
+model call with a monotonic timer, not wall-clock subtraction. Tests inject fixed
+clock/timer values and never sleep.
 
 ## Dependency and configuration decisions
 
@@ -52,16 +69,24 @@ No sampling parameters are imposed on the selected model.
 
 ## Verification and remaining limits
 
-Unit tests use a mocked ChatModel to verify deferred invocation, incident message
-mapping (including literal JSON braces), and plain-text responses. Context tests
-construct the real adapter/model with a fictional key and a loopback URL, verify
-the default and overridden model, and reject blank model configuration.
-All existing Spring Boot tests receive test-only credentials and a loopback URL.
-No test invokes the live provider or consumes tokens.
+Service unit tests verify lookup, exact title/description forwarding, result mapping
+and the unknown-incident path without invoking the gateway. Adapter tests verify
+metadata, missing/partial usage, real zero counts, empty responses, error translation
+and timing. MockMvc tests replace the gateway with a mock and cover 200/404/502,
+JSON null usage, unchanged incident data and transaction suspension/restoration.
+The OpenAPI test checks the new operation, response codes and DTO descriptions/examples.
+All contexts use fictional credentials and a loopback URL. No test sends a real
+OpenAI request or consumes tokens.
 
-The default model name is the requested configuration value, not evidence of
-availability for a particular OpenAI account. A successful context startup does
-not establish provider protocol compatibility. Real calls, structured output,
-timeouts/error handling and usage metadata remain future spike work; ADR-003
-therefore stays Proposed. There is no new persistence, retry policy, RAG,
-tool calling, Ollama integration, or REST endpoint.
+The adapter explicitly rejects null generation output as an empty response and
+defensively handles null metadata with the configured model and null token counts.
+Spring AI 2.0.1's ChatResponse constructor normalizes null metadata to a new empty
+ChatResponseMetadata (`Objects.requireNonNullElse`), so ordinary construction cannot
+produce a null getter result. The missing-metadata test exercises this constructor
+path without reflection; a separate test covers null generation output.
+
+There is no analysis persistence, structured output, retry/fallback policy, RAG,
+tool calling or Ollama integration. This endpoint is synchronous and has no new
+rate limiting or authentication. Repeated requests generate fresh analyses.
+Live model availability, protocol behavior and production timeout policy remain
+unvalidated; ADR-003 remains Proposed.

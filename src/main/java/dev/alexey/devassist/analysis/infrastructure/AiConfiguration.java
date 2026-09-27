@@ -1,5 +1,7 @@
 package dev.alexey.devassist.analysis.infrastructure;
 
+import java.time.Clock;
+
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -11,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 public class AiConfiguration {
 
 	@Bean
-	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel) {
-		return new OpenAiIncidentAnalysisGateway(chatModel);
+	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel, AiProperties properties) {
+		return new OpenAiIncidentAnalysisGateway(chatModel, properties.model(), Clock.systemUTC(), System::nanoTime);
 	}
 }

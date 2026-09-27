@@ -13,7 +13,7 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 2 — LLM integration, infrastructure step**
+**Phase 2 — Incident analysis service and REST endpoint**
 
 Currently implemented:
 
@@ -29,8 +29,8 @@ Currently implemented:
 - non-root runtime container;
 - GitHub Actions CI.
 
-The incident REST API is implemented. OpenAI infrastructure is configured behind
-an application gateway, but no REST operation invokes it yet.
+The incident REST API includes synchronous analysis of an existing incident through
+a provider-neutral gateway. Analysis results are returned without persistence.
 
 ## Technology
 
@@ -128,6 +128,35 @@ incident ID in `client.global`; subsequent requests reuse it. Re-run the scenari
 from creation to obtain a fresh incident. The final two requests intentionally
 return 409 and 400.
 
+## Incident analysis
+
+`POST /api/v1/incidents/{id}/analysis` takes an incident UUID and no request body.
+Only the stored title and description are sent to the AI gateway. A successful
+200 response has this shape (illustrative values):
+
+```json
+{
+  "content": "Check database connectivity.",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "generatedAt": "2026-09-27T12:00:00Z",
+  "latencyMs": 1250,
+  "inputTokens": 120,
+  "outputTokens": 80,
+  "totalTokens": 200
+}
+```
+
+Unavailable token counts are `null`. `generatedAt` is application receipt time;
+latency uses a monotonic timer. The result is not saved and each POST generates
+a new analysis. Provider calls run outside DB transactions.
+
+Unknown incidents return the existing 404 `application/problem+json` response.
+Provider failures or empty content return 502 with the fixed detail
+`Incident analysis is temporarily unavailable.` Provider internals are not exposed.
+With real runtime credentials, this endpoint invokes the provider; automated tests
+use mocks and do not consume tokens.
+
 ## Running tests
 
 Docker must be running because integration tests use Testcontainers.
@@ -180,7 +209,8 @@ automatically: export the variables or configure them in your IDE.
 
 Only the chat model is enabled. SDK retries are disabled for this step. Startup
 constructs the client but does not contact OpenAI. All tests use a fictional key
-and a loopback base URL; gateway unit tests use a mocked model. No OpenAI account
+and a loopback base URL; endpoint tests replace the gateway and adapter tests mock
+the model. No OpenAI account
 or tokens are required for `./mvnw clean verify`.
 
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
@@ -203,9 +233,9 @@ AI capabilities are added only when they solve a concrete product problem.
 
 ## Known limitations
 
-The current AI step provides infrastructure only.
+The current AI step provides synchronous, unstructured analysis.
 
-- no AI analysis endpoint or service orchestration;
+- analysis is synchronous and results are not persisted;
 - real model availability and response behavior have not been validated;
 - no authentication or authorization;
 - no vector search;

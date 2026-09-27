@@ -1,5 +1,8 @@
 package dev.alexey.devassist.incident.mapper;
 
+import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.incident.dto.IncidentAnalysisResponseDTO;
+
 import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
 import dev.alexey.devassist.incident.dto.IncidentPageResponseDTO;
 import dev.alexey.devassist.incident.entity.Incident;
@@ -16,6 +19,8 @@ import org.mapstruct.ReportingPolicy;
 public interface IncidentMapper {
 
 	IncidentResponseDTO toResponse(Incident incident);
+
+	IncidentAnalysisResponseDTO toAnalysisResponse(IncidentAnalysisResult result);
 
 	List<IncidentResponseDTO> toResponses(List<Incident> incidents);
 

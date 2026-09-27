@@ -1,5 +1,19 @@
 package dev.alexey.devassist.incident.controller;
 
+import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
+import dev.alexey.devassist.analysis.IncidentAnalysisInput;
+import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
+import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
+import dev.alexey.devassist.incident.service.IncidentAnalysisService;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.hamcrest.Matchers.nullValue;
+
 import dev.alexey.devassist.incident.entity.Incident;
 import dev.alexey.devassist.incident.enums.IncidentSource;
 import dev.alexey.devassist.incident.enums.IncidentStatus;
@@ -60,6 +74,15 @@ class IncidentControllerTests {
 
 	@Autowired
 	JdbcTemplate jdbcTemplate;
+
+	@MockitoBean
+	IncidentAnalysisGateway gateway;
+
+	@Autowired
+	IncidentAnalysisService analysisService;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
 
 	MockMvc mockMvc;
 
@@ -263,7 +286,7 @@ class IncidentControllerTests {
 	void progressesIncidentThroughAllowedStatusesAndPersistsChanges() throws Exception {
 		Incident incident = createIncidentAt("Incident", "2026-01-01T00:00:00Z");
 		for (IncidentStatus next : new IncidentStatus[]{IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED}) {
-			mockMvc.perform(patch(INCIDENTS_URL + "/{id}/status", incident.getId())
+			MvcResult response = mockMvc.perform(patch(INCIDENTS_URL + "/{id}/status", incident.getId())
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("{\"status\":\"" + next.name() + "\"}"))
 					.andExpect(status().isOk())
@@ -274,9 +297,15 @@ class IncidentControllerTests {
 					.andExpect(jsonPath("$.description").value("Description"))
 					.andExpect(jsonPath("$.source").value("MANUAL"))
 					.andExpect(jsonPath("$.createdAt").value("2026-01-01T00:00:00Z"))
-					.andExpect(jsonPath("$.updatedAt").isNotEmpty());
+					.andExpect(jsonPath("$.updatedAt").isNotEmpty())
+					.andReturn();
 
-			assertThat(repository.findById(incident.getId()).orElseThrow().getStatus()).isEqualTo(next);
+			var persisted = repository.findById(incident.getId()).orElseThrow();
+			assertThat(persisted.getStatus()).isEqualTo(next);
+			String responseTimestamp = com.jayway.jsonpath.JsonPath.read(
+					response.getResponse().getContentAsString(), "$.updatedAt");
+			assertThat(Instant.parse(responseTimestamp).truncatedTo(java.time.temporal.ChronoUnit.MILLIS))
+					.isEqualTo(persisted.getUpdatedAt().truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
 		}
 	}
 
@@ -379,5 +408,97 @@ class IncidentControllerTests {
 				""",
 				"{",
 				"");
+	}
+
+	@Test
+	void analyzesExistingIncidentOutsideTransactionWithoutChangingDatabase() throws Exception {
+		var incident = repository.save(new Incident("Database unavailable", "Connection failed", IncidentSource.API));
+		var generatedAt = Instant.parse("2026-09-27T12:00:00Z");
+		when(gateway.analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed")))
+				.thenAnswer(invocation -> {
+					assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+					return new IncidentAnalysisResult("Check connectivity", "fake", "test-model", generatedAt,
+							125, 12, 8, 20);
+				});
+		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.content").value("Check connectivity"))
+				.andExpect(jsonPath("$.provider").value("fake"))
+				.andExpect(jsonPath("$.model").value("test-model"))
+				.andExpect(jsonPath("$.generatedAt").value(generatedAt.toString()))
+				.andExpect(jsonPath("$.latencyMs").value(125))
+				.andExpect(jsonPath("$.inputTokens").value(12))
+				.andExpect(jsonPath("$.outputTokens").value(8))
+				.andExpect(jsonPath("$.totalTokens").value(20));
+		verify(gateway).analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed"));
+		assertThat(repository.count()).isEqualTo(1);
+		assertThat(repository.findById(incident.getId()).orElseThrow()).usingRecursiveComparison().isEqualTo(incident);
+	}
+
+	@Test
+	void analysisPreservesMissingUsageAsJsonNull() throws Exception {
+		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
+		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult("Analysis", "fake", "model",
+				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null));
+		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.inputTokens").value(nullValue()))
+				.andExpect(jsonPath("$.outputTokens").value(nullValue()))
+				.andExpect(jsonPath("$.totalTokens").value(nullValue()));
+	}
+
+	@Test
+	void analysisOfUnknownIncidentReturnsExisting404() throws Exception {
+		UUID id = UUID.randomUUID();
+		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", id))
+				.andExpect(status().isNotFound())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(404))
+				.andExpect(jsonPath("$.title").value("Not Found"))
+				.andExpect(jsonPath("$.detail").value("Incident with id " + id + " was not found."))
+				.andExpect(jsonPath("$.instance").value(INCIDENTS_URL + "/" + id + "/analysis"));
+		verifyNoInteractions(gateway);
+	}
+
+	@Test
+	void providerFailureReturnsSanitized502() throws Exception {
+		var incident = repository.save(new Incident("Title", "private prompt", IncidentSource.API));
+		when(gateway.analyze(any())).thenThrow(new IncidentAnalysisException(
+				new IllegalStateException("fake-api-key private prompt provider internals")));
+		var result = mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isBadGateway())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(502))
+				.andExpect(jsonPath("$.title").value("Bad Gateway"))
+				.andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."))
+				.andExpect(jsonPath("$.instance").value(INCIDENTS_URL + "/" + incident.getId() + "/analysis"))
+				.andReturn();
+		assertThat(result.getResponse().getContentAsString())
+				.doesNotContain("fake-api-key", "private prompt", "provider internals", "IllegalStateException");
+	}
+
+	@Test
+	void emptyProviderContentReturns502() throws Exception {
+		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
+		when(gateway.analyze(any())).thenThrow(new EmptyIncidentAnalysisException());
+		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isBadGateway())
+				.andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."));
+	}
+
+	@Test
+	void suspendsAndRestoresCallerTransactionAroundAnalysis() {
+		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
+		when(gateway.analyze(any())).thenAnswer(invocation -> {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			return new IncidentAnalysisResult("Analysis", "fake", "model", Instant.EPOCH, 1, null, null, null);
+		});
+		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+			analysisService.analyze(incident.getId());
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+		});
+		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description"));
 	}
 }
