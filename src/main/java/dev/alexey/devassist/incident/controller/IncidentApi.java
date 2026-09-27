@@ -77,5 +77,7 @@ public interface IncidentApi {
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 	@ApiResponse(responseCode = "502", description = "Analysis provider failed or returned empty content",
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+	@ApiResponse(responseCode = "504", description = "Analysis provider timed out",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 	IncidentAnalysisResponseDTO analyze(@Parameter(description = "Incident UUID") @PathVariable UUID id);
 }

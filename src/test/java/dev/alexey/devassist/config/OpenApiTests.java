@@ -62,6 +62,7 @@ class OpenApiTests {
 
 		jsonPath(operations[4] + ".responses['404'].content['application/problem+json']").exists().match(result);
 		jsonPath(operations[4] + ".responses['502'].content['application/problem+json']").exists().match(result);
+		jsonPath(operations[4] + ".responses['504'].content['application/problem+json']").exists().match(result);
 		jsonPath(operations[4] + ".responses['200'].content['application/json'].schema['$ref']")
 				.value("#/components/schemas/IncidentAnalysisResponseDTO").match(result);
 		jsonPath(operations[4] + ".requestBody").doesNotExist().match(result);

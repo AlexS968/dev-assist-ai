@@ -4,7 +4,8 @@
 existing incident. The request has no body. It returns 200 with content, provider,
 model, promptVersion, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
 An unknown UUID returns the existing 404 ProblemDetail; provider failures and
-null/empty/blank content return a sanitized 502 ProblemDetail. No analysis is saved.
+null/empty/blank content return a sanitized 502 ProblemDetail. Transport timeouts
+return 504 with a fixed safe message. No analysis is saved.
 
 ## Components and boundary
 
@@ -100,6 +101,42 @@ and partial-usage handling. No temperature, retries or fallback are added.
 For reasoning models, the completion budget may include reasoning tokens and can
 truncate visible output. The current contract does not expose the finish reason.
 
+## Transport timeout
+
+`app.ai.timeout` is a `Duration`, bound from `AI_TIMEOUT` with default `20s`.
+It is required, at least 1 ms and at most 2147483647 ms (OkHttp's millisecond range).
+Blank, zero, negative and out-of-range values are rejected at startup.
+
+Dependency sources inspected: Spring AI 2.0.1 and OpenAI Java core 4.49.0.
+The implementation uses the supported configuration path, without a custom executor:
+
+```text
+app.ai.timeout -> spring.ai.openai.timeout
+  -> OpenAiChatAutoConfiguration -> OpenAiSetup
+  -> ClientOptions.timeout + SpringAiOpenAiHttpClient.Builder.timeout(Duration)
+  -> OkHttpClient.Builder.callTimeout(Duration)
+```
+
+The SDK timeout includes the entire HTTP call, including request/response body I/O;
+read/write timeouts inherit that budget. OkHttp handles cancellation at transport
+level. No CompletableFuture race leaves a detached request running in the background.
+The existing SDK `max-retries=0` is unchanged; no retry/fallback mechanism is added.
+
+SpringAiOpenAiHttpClient wraps I/O failures in `OpenAIIoException`. The adapter
+walks the cause chain for `SocketTimeoutException` or OkHttp's whole-call
+`InterruptedIOException("timeout")` and emits `IncidentAnalysisTimeoutException`.
+An ordinary connection failure or interruption remains a generic 502 error.
+The REST handler returns a fixed 504 detail, never a cause, URL, key or prompt.
+All SDK/transport exception inspection remains in infrastructure.
+
+Context tests hook the supported `OpenAiHttpClientBuilderCustomizer` seam after
+OpenAiSetup configures each sync/async builder. They build and inspect the actual
+OkHttp clients' `callTimeoutMillis()` without executing any request. Adapter tests
+inject the exact transport exception shapes; MockMvc verifies safe 504 responses.
+No timeout test sleeps or waits for an actual deadline. These tests establish wiring
+and exception translation, not a measured live deadline. Client cancellation also
+cannot guarantee cancellation of provider-side computation or billing.
+
 ## Verification and remaining limits
 
 Service unit tests verify lookup, exact title/description forwarding, result mapping
@@ -107,7 +144,7 @@ and the unknown-incident path without invoking the gateway. Adapter tests verify
 metadata, missing/partial usage, real zero counts, empty responses, error translation
 and timing. Tests load the actual versioned resources, verify separate roles and
 literal substitutions, capture real OpenAiChatOptions with the configured limit,
-and verify configuration defaults, overrides and invalid values. MockMvc tests replace the gateway with a mock and cover 200/404/502,
+and verify configuration defaults, overrides and invalid values. MockMvc tests replace the gateway with a mock and cover 200/404/502/504,
 JSON null usage, unchanged incident data and transaction suspension/restoration.
 The OpenAPI test checks the new operation, response codes and DTO descriptions/examples.
 All contexts use fictional credentials and a loopback URL. No test sends a real
@@ -123,9 +160,9 @@ path without reflection; a separate test covers null generation output.
 There is no analysis persistence, structured output, retry/fallback policy, RAG,
 tool calling or Ollama integration. This endpoint is synchronous and has no new
 rate limiting or authentication. Repeated requests generate fresh analyses.
-The user-reported live smoke test on 2026-09-27 returned 200 with gpt-6-luna and
-usage metadata, confirmed in OpenAI Usage (see ADR-003). No repeat live request was
-made for this step. The first response was longer than desired, motivating prompt
-versioning and the output-token limit; the new behavior is verified offline only.
-Structured-output conversion and timeout validation remain outstanding, so ADR-003
-remains Proposed under its existing acceptance criteria.
+Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
+(see ADR-003). The second used incident-analysis-v1, took 5816 ms and produced
+383 output tokens within the 450-token budget; the response was complete.
+No repeat live request was made for timeout implementation. Timeout wiring and
+error translation are tested offline; structured-output conversion remains
+outstanding, so ADR-003 remains Proposed.

@@ -44,7 +44,7 @@ a provider-neutral gateway. Analysis results are returned without persistence.
 - GitHub Actions
 
 Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
-pending structured-output and timeout validation. The live smoke test on
+pending structured-output validation. Transport timeout handling is tested offline. The live smoke test on
 2026-09-27 succeeded with gpt-6-luna; see ADR-003 for the recorded evidence.
 
 ## Architecture
@@ -155,7 +155,8 @@ a new analysis. Provider calls run outside DB transactions.
 
 Unknown incidents return the existing 404 `application/problem+json` response.
 Provider failures or empty content return 502 with the fixed detail
-`Incident analysis is temporarily unavailable.` Provider internals are not exposed.
+`Incident analysis is temporarily unavailable.` Transport timeouts return 504 with
+`Incident analysis timed out. Please try again later.` Provider internals are not exposed.
 With real runtime credentials, this endpoint invokes the provider; automated tests
 use mocks and do not consume tokens.
 
@@ -200,6 +201,7 @@ Local defaults are provided for development:
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `AI_PROMPT_VERSION` | `incident-analysis-v1` |
 | `OPENAI_MAX_OUTPUT_TOKENS` | `450` |
+| `AI_TIMEOUT` | `20s` |
 
 The defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -228,6 +230,13 @@ for every request. No temperature is set. The 450-token default and concise prom
 address the overly long first smoke-test response. For reasoning models, the limit
 also budgets reasoning tokens: visible output can be shorter or truncated.
 
+`app.ai.timeout` is a Duration (for example `20s`, `750ms` or `PT20S`). It is
+required and validated from 1 ms to 2147483647 ms, the supported OkHttp range;
+blank, zero and negative values fail startup. It feeds `spring.ai.openai.timeout`
+and the SDK/OkHttp whole-call deadline. No background future timeout is used and
+SDK retries remain zero. Cancelling the local call cannot guarantee that the
+provider stops processing or billing work already received.
+
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
 
 ## Roadmap
@@ -251,7 +260,7 @@ AI capabilities are added only when they solve a concrete product problem.
 The current AI step provides synchronous, unstructured analysis.
 
 - analysis is synchronous and results are not persisted;
-- the new prompt and token limit have offline coverage but have not been live-tested;
+- prompt v1 and the 450-token limit passed a second live smoke test; timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
 - no vector search;
 - no operational tools;

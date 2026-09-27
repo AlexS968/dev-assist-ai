@@ -4,6 +4,7 @@ import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
 import dev.alexey.devassist.incident.service.IncidentAnalysisService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -501,5 +502,22 @@ class IncidentControllerTests {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
 		});
 		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description"));
+	}
+
+	@Test
+	void providerTimeoutReturnsSanitized504() throws Exception {
+		var incident = repository.save(new Incident("Title", "private incident description", IncidentSource.API));
+		when(gateway.analyze(any())).thenThrow(new IncidentAnalysisTimeoutException(
+				new IllegalStateException("fake-api-key full prompt private incident description https://provider.invalid/private")));
+		var result = mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isGatewayTimeout())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(504))
+				.andExpect(jsonPath("$.title").value("Gateway Timeout"))
+				.andExpect(jsonPath("$.detail").value("Incident analysis timed out. Please try again later."))
+				.andExpect(jsonPath("$.instance").value(INCIDENTS_URL + "/" + incident.getId() + "/analysis"))
+				.andReturn();
+		assertThat(result.getResponse().getContentAsString()).doesNotContain(
+				"fake-api-key", "full prompt", "private incident description", "provider.invalid", "IllegalStateException", "stackTrace");
 	}
 }

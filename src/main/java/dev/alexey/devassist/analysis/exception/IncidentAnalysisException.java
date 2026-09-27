@@ -7,6 +7,10 @@ public class IncidentAnalysisException extends RuntimeException {
 		super("Incident analysis provider failed.", cause);
 	}
 
+	protected IncidentAnalysisException(String message, Throwable cause) {
+		super(message, cause);
+	}
+
 	protected IncidentAnalysisException(String message) {
 		super(message);
 	}

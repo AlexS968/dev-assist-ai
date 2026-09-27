@@ -4,6 +4,12 @@ import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import java.time.Clock;
+import java.time.Duration;
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
+import java.net.ConnectException;
+import com.openai.errors.OpenAIIoException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -36,7 +42,7 @@ class OpenAiIncidentAnalysisGatewayTests {
 
 	private OpenAiIncidentAnalysisGateway gateway() {
 		var ticks = new AtomicLong(100_000_000L);
-		return new OpenAiIncidentAnalysisGateway(model, new AiProperties("configured-model", "incident-analysis-v1", 321),
+		return new OpenAiIncidentAnalysisGateway(model, new AiProperties("configured-model", "incident-analysis-v1", 321, Duration.ofSeconds(20)),
 				new IncidentAnalysisPrompt("incident-analysis-v1"),
 				Clock.fixed(NOW, ZoneOffset.UTC), () -> ticks.getAndAdd(125_000_000L));
 	}
@@ -172,6 +178,41 @@ class OpenAiIncidentAnalysisGatewayTests {
 				.isInstanceOf(IncidentAnalysisException.class)
 				.hasMessage("Incident analysis provider failed.").hasCause(failure);
 		verify(model).call(any(Prompt.class));
+	}
+
+	@Test
+	void translatesSdkSocketTimeoutWithoutRetry() {
+		var failure = new OpenAIIoException("private provider URL", new SocketTimeoutException("secret details"));
+		when(model.call(any(Prompt.class))).thenThrow(failure);
+		assertThatThrownBy(() -> gateway().analyze(input))
+				.isExactlyInstanceOf(IncidentAnalysisTimeoutException.class)
+				.hasMessage("Incident analysis provider timed out.").hasCause(failure);
+		verify(model).call(any(Prompt.class));
+	}
+
+	@Test
+	void translatesWrappedOkHttpCallDeadline() {
+		var failure = new IllegalStateException(new OpenAIIoException("Request failed", new InterruptedIOException("timeout")));
+		when(model.call(any(Prompt.class))).thenThrow(failure);
+		assertThatThrownBy(() -> gateway().analyze(input))
+				.isExactlyInstanceOf(IncidentAnalysisTimeoutException.class).hasCause(failure);
+		verify(model).call(any(Prompt.class));
+	}
+
+	@Test
+	void ordinaryIoFailureRemainsGenericProviderFailure() {
+		var failure = new OpenAIIoException("timeout in untrusted error text", new ConnectException("Connection refused"));
+		when(model.call(any(Prompt.class))).thenThrow(failure);
+		assertThatThrownBy(() -> gateway().analyze(input))
+				.isExactlyInstanceOf(IncidentAnalysisException.class).hasCause(failure);
+	}
+
+	@Test
+	void ordinaryInterruptionIsNotClassifiedAsTimeout() {
+		var failure = new OpenAIIoException("Request failed", new InterruptedIOException("interrupted"));
+		when(model.call(any(Prompt.class))).thenThrow(failure);
+		assertThatThrownBy(() -> gateway().analyze(input))
+				.isExactlyInstanceOf(IncidentAnalysisException.class).hasCause(failure);
 	}
 
 	private ChatResponse response(String content, ChatResponseMetadata metadata) {

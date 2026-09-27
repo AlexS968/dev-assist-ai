@@ -125,14 +125,34 @@ The call preceded versioned templates and the new output-token limit.
 
 Observed limitation: the first answer was longer than desired. This motivates
 `incident-analysis-v1`, concise response instructions and a configurable completion
-budget of 450 tokens by default. The revised prompt and limit are tested offline;
-their effect on live answer quality has not yet been measured.
+budget of 450 tokens by default. The second smoke test below validates the revised
+prompt and limit for one observed response.
 
-Acceptance evidence now covers a successful model call, response usage metadata,
-fake replacement in automated tests, and sanitized provider-error handling.
-Structured-output conversion and explicit timeout validation remain unproven.
-The status therefore remains **Proposed**; accepting the ADR now would omit two
-of its existing validation criteria. Those criteria are not weakened by this step.
+### Second live smoke test — 2026-09-27
+
+The project owner supplied these additional observations:
+
+| Observation | Value |
+|---|---|
+| HTTP status | 200 |
+| Model | gpt-6-luna |
+| Prompt version | incident-analysis-v1 |
+| Latency | 5816 ms |
+| Input tokens | 141 |
+| Output tokens | 383 |
+| Output limit | 450, respected |
+| Completion | Answer complete, not truncated |
+
+No additional live call was made for timeout implementation. No total-token value
+is asserted for the second test because it was not supplied. No credentials,
+full prompt or full response are included.
+
+Acceptance evidence now covers successful model calls, usage metadata, fake
+replacement, safe provider-error handling, and offline transport-timeout wiring
+and 504 translation. Tests inspect actual OkHttp timeout configuration and simulate
+transport exceptions without network calls or sleep. Live timeout expiry has not
+been measured. Structured-output conversion is still not implemented, so the
+status remains **Proposed** under the existing acceptance criteria.
 
 See [implementation boundaries](../architecture/ai-integration.md).
 

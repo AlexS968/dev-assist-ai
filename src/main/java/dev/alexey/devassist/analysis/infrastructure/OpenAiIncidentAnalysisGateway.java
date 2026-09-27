@@ -5,6 +5,9 @@ import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
 import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -47,6 +50,9 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 			response = chatModel.call(request);
 		}
 		catch (RuntimeException exception) {
+			if (isTransportTimeout(exception)) {
+				throw new IncidentAnalysisTimeoutException(exception);
+			}
 			throw new IncidentAnalysisException(exception);
 		}
 		long latencyMs = TimeUnit.NANOSECONDS.toMillis(nanoTime.getAsLong() - started);
@@ -71,5 +77,18 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 				hasUsage ? usage.getPromptTokens() : null,
 				hasUsage ? usage.getCompletionTokens() : null,
 				hasUsage ? usage.getTotalTokens() : null);
+	}
+
+	private static boolean isTransportTimeout(Throwable failure) {
+		for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+			// OkHttp read/connect timeouts use SocketTimeoutException. Its whole-call
+			// deadline uses InterruptedIOException("timeout"); ordinary interruption
+			// must not be mistaken for a timeout.
+			if (cause instanceof SocketTimeoutException
+					|| (cause instanceof InterruptedIOException && "timeout".equals(cause.getMessage()))) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

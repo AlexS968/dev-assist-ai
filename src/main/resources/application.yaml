@@ -14,6 +14,7 @@ spring:
     openai:
       api-key: ${OPENAI_API_KEY}
       max-retries: 0
+      timeout: ${app.ai.timeout}
       chat:
         model: ${app.ai.model}
 
@@ -35,6 +36,7 @@ app:
     model: ${OPENAI_MODEL:gpt-6-luna}
     prompt-version: ${AI_PROMPT_VERSION:incident-analysis-v1}
     max-output-tokens: ${OPENAI_MAX_OUTPUT_TOKENS:450}
+    timeout: ${AI_TIMEOUT:20s}
 
 management:
   endpoints:
