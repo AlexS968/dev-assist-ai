@@ -2,7 +2,7 @@
 
 `POST /api/v1/incidents/{id}/analysis` generates a synchronous analysis for an
 existing incident. The request has no body. It returns 200 with content, provider,
-model, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
+model, promptVersion, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
 An unknown UUID returns the existing 404 ProblemDetail; provider failures and
 null/empty/blank content return a sanitized 502 ProblemDetail. No analysis is saved.
 
@@ -23,7 +23,9 @@ null/empty/blank content return a sanitized 502 ProblemDetail. No analysis is sa
 - `IncidentAnalysisException` wraps provider failures. Its distinct subtype
   `EmptyIncidentAnalysisException` represents empty content. The HTTP handler always
   emits a fixed public message, never the provider exception, cause, key or prompt.
-- `AiConfiguration` supplies the model, configured model name, UTC Clock and a
+- `IncidentAnalysisPrompt` loads a versioned system/user template pair at startup.
+  It renders title/description only in the user template, preserving literal data.
+- `AiConfiguration` supplies the model, properties, prompt, UTC Clock and a
   monotonic nanosecond supplier through constructor injection. `AiProperties`
   validates the application-owned model configuration.
 
@@ -67,12 +69,45 @@ Only chat is enabled; embedding, image, moderation, speech and transcription
 auto-configurations are disabled. SDK retries are explicitly set to zero.
 No sampling parameters are imposed on the selected model.
 
+## Versioned prompt contract
+
+`incident-analysis-v1` maps explicitly to these UTF-8 classpath resources:
+
+- `prompts/incident-analysis/v1/system.st`
+- `prompts/incident-analysis/v1/user.st`
+
+The system message asks for at most three likely causes and four concrete
+investigation steps, uncertainty and evidence, with short bullets and no unsupported
+root-cause claim. Incident content is untrusted data and cannot be interpolated into
+system instructions. The user template binds only title and description; values are
+not recursively rendered as templates. Role separation reduces instruction confusion
+but does not guarantee that a model will resist every prompt injection.
+
+The version is an immutable behavioral identifier. Future prompt changes must add a
+new directory and explicitly register a new identifier, rather than rewriting v1.
+`promptVersion` is returned in the provider-neutral result and REST DTO.
+
+| Application property | Environment variable | Default | Validation |
+|---|---|---|---|
+| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v1` | Nonblank, registered version |
+| `app.ai.max-output-tokens` | `OPENAI_MAX_OUTPUT_TOKENS` | `450` | Integer, 1–16384 |
+
+The upper bound is an application guardrail; provider/model capabilities can be
+more restrictive. OpenAI-specific `maxCompletionTokens` is applied to each request
+inside the infrastructure adapter. The adapter calls ChatModel directly with a
+Prompt, avoiding ChatClient's automatic tool-calling advisor and preserving empty-output
+and partial-usage handling. No temperature, retries or fallback are added.
+For reasoning models, the completion budget may include reasoning tokens and can
+truncate visible output. The current contract does not expose the finish reason.
+
 ## Verification and remaining limits
 
 Service unit tests verify lookup, exact title/description forwarding, result mapping
 and the unknown-incident path without invoking the gateway. Adapter tests verify
 metadata, missing/partial usage, real zero counts, empty responses, error translation
-and timing. MockMvc tests replace the gateway with a mock and cover 200/404/502,
+and timing. Tests load the actual versioned resources, verify separate roles and
+literal substitutions, capture real OpenAiChatOptions with the configured limit,
+and verify configuration defaults, overrides and invalid values. MockMvc tests replace the gateway with a mock and cover 200/404/502,
 JSON null usage, unchanged incident data and transaction suspension/restoration.
 The OpenAPI test checks the new operation, response codes and DTO descriptions/examples.
 All contexts use fictional credentials and a loopback URL. No test sends a real
@@ -88,5 +123,9 @@ path without reflection; a separate test covers null generation output.
 There is no analysis persistence, structured output, retry/fallback policy, RAG,
 tool calling or Ollama integration. This endpoint is synchronous and has no new
 rate limiting or authentication. Repeated requests generate fresh analyses.
-Live model availability, protocol behavior and production timeout policy remain
-unvalidated; ADR-003 remains Proposed.
+The user-reported live smoke test on 2026-09-27 returned 200 with gpt-6-luna and
+usage metadata, confirmed in OpenAI Usage (see ADR-003). No repeat live request was
+made for this step. The first response was longer than desired, motivating prompt
+versioning and the output-token limit; the new behavior is verified offline only.
+Structured-output conversion and timeout validation remain outstanding, so ADR-003
+remains Proposed under its existing acceptance criteria.

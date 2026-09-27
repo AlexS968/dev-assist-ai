@@ -2,6 +2,9 @@ package dev.alexey.devassist.analysis.infrastructure;
 
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.validation.BindValidationException;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiCommonProperties;
 import org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration;
@@ -35,6 +38,9 @@ class AiConfigurationTests {
 			assertThat(context.getBean(IncidentAnalysisGateway.class))
 					.isInstanceOf(OpenAiIncidentAnalysisGateway.class);
 			assertThat(context.getBean(AiProperties.class).model()).isEqualTo("gpt-6-luna");
+			assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
+			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(450);
+			assertThat(context.getBean(IncidentAnalysisPrompt.class).version()).isEqualTo("incident-analysis-v1");
 			assertThat(context.getBean(OpenAiChatModel.class).getOptions().getModel())
 					.isEqualTo("gpt-6-luna");
 			var properties = context.getBean(OpenAiCommonProperties.class);
@@ -57,5 +63,44 @@ class AiConfigurationTests {
 	void rejectsBlankModelConfiguration() {
 		contextRunner.withPropertyValues("app.ai.model=").run(context ->
 				assertThat(context).hasFailed());
+	}
+
+	@Test
+	void overridesPromptSettingsThroughEnvironmentPlaceholders() {
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v1", "OPENAI_MAX_OUTPUT_TOKENS=300")
+				.run(context -> {
+					assertThat(context).hasNotFailed();
+					assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
+					assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(300);
+				});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"", " "})
+	void rejectsBlankPromptVersion(String version) {
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=" + version).run(context ->
+				assertThat(context).hasFailed().getFailure().hasRootCauseInstanceOf(BindValidationException.class));
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = {-1, 0, 16385})
+	void rejectsInvalidOutputTokenLimit(int limit) {
+		contextRunner.withPropertyValues("OPENAI_MAX_OUTPUT_TOKENS=" + limit).run(context ->
+				assertThat(context).hasFailed().getFailure().hasRootCauseInstanceOf(BindValidationException.class));
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = {1, 16384})
+	void acceptsOutputTokenLimitBoundaries(int limit) {
+		contextRunner.withPropertyValues("OPENAI_MAX_OUTPUT_TOKENS=" + limit).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(limit);
+		});
+	}
+
+	@Test
+	void rejectsUnknownPromptVersionAtStartup() {
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v999").run(context ->
+				assertThat(context).hasFailed().getFailure().hasRootCauseInstanceOf(IllegalArgumentException.class));
 	}
 }

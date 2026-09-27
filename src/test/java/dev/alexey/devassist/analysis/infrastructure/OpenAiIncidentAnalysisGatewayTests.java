@@ -21,8 +21,8 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,9 +35,9 @@ class OpenAiIncidentAnalysisGatewayTests {
 	private final IncidentAnalysisInput input = new IncidentAnalysisInput("Database unavailable", "Request failed: {\"code\":503}");
 
 	private OpenAiIncidentAnalysisGateway gateway() {
-		when(model.getOptions()).thenReturn(ChatOptions.builder().build());
 		var ticks = new AtomicLong(100_000_000L);
-		return new OpenAiIncidentAnalysisGateway(model, "configured-model",
+		return new OpenAiIncidentAnalysisGateway(model, new AiProperties("configured-model", "incident-analysis-v1", 321),
+				new IncidentAnalysisPrompt("incident-analysis-v1"),
 				Clock.fixed(NOW, ZoneOffset.UTC), () -> ticks.getAndAdd(125_000_000L));
 	}
 
@@ -56,6 +56,7 @@ class OpenAiIncidentAnalysisGatewayTests {
 
 		assertThat(result.content()).isEqualTo("Check database connectivity.");
 		assertThat(result.provider()).isEqualTo("openai");
+		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v1");
 		assertThat(result.model()).isEqualTo("reported-model");
 		assertThat(result.generatedAt()).isEqualTo(NOW);
 		assertThat(result.latencyMs()).isEqualTo(125);
@@ -65,6 +66,14 @@ class OpenAiIncidentAnalysisGatewayTests {
 		var prompt = ArgumentCaptor.forClass(Prompt.class);
 		verify(model).call(prompt.capture());
 		assertThat(prompt.getValue().getInstructions()).hasSize(2);
+		assertThat(prompt.getValue().getOptions()).isInstanceOf(OpenAiChatOptions.class);
+		var options = (OpenAiChatOptions) prompt.getValue().getOptions();
+		assertThat(options.getMaxCompletionTokens()).isEqualTo(321);
+		assertThat(options.getMaxTokens()).isNull();
+		assertThat(options.getTemperature()).isNull();
+		assertThat(prompt.getValue().getInstructions().getFirst().getText())
+				.isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v1").system())
+				.doesNotContain(input.title(), input.description());
 		assertThat(prompt.getValue().getInstructions().getFirst().getMessageType()).isEqualTo(MessageType.SYSTEM);
 		assertThat(prompt.getValue().getInstructions().getLast().getMessageType()).isEqualTo(MessageType.USER);
 		assertThat(prompt.getValue().getInstructions().getLast().getText())
@@ -134,6 +143,7 @@ class OpenAiIncidentAnalysisGatewayTests {
 
 		assertThat(result.content()).isEqualTo("Analysis");
 		assertThat(result.provider()).isEqualTo("openai");
+		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v1");
 		assertThat(result.model()).isEqualTo("configured-model");
 		assertThat(result.generatedAt()).isEqualTo(NOW);
 		assertThat(result.latencyMs()).isEqualTo(125);

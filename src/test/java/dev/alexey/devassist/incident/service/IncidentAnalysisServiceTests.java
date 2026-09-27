@@ -30,7 +30,7 @@ class IncidentAnalysisServiceTests {
 		var incident = new Incident("Title", "Description", IncidentSource.MONITORING);
 		when(repository.findById(id)).thenReturn(Optional.of(incident));
 		var input = new IncidentAnalysisInput("Title", "Description");
-		var result = new IncidentAnalysisResult("Analysis", "fake", "test-model",
+		var result = new IncidentAnalysisResult("Analysis", "fake", "test-model", "incident-analysis-v1",
 				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20);
 		when(gateway.analyze(input)).thenReturn(result);
 

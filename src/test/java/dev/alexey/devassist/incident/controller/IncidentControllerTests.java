@@ -417,7 +417,7 @@ class IncidentControllerTests {
 		when(gateway.analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed")))
 				.thenAnswer(invocation -> {
 					assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-					return new IncidentAnalysisResult("Check connectivity", "fake", "test-model", generatedAt,
+					return new IncidentAnalysisResult("Check connectivity", "fake", "test-model", "incident-analysis-v1", generatedAt,
 							125, 12, 8, 20);
 				});
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
@@ -426,6 +426,7 @@ class IncidentControllerTests {
 				.andExpect(jsonPath("$.content").value("Check connectivity"))
 				.andExpect(jsonPath("$.provider").value("fake"))
 				.andExpect(jsonPath("$.model").value("test-model"))
+				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v1"))
 				.andExpect(jsonPath("$.generatedAt").value(generatedAt.toString()))
 				.andExpect(jsonPath("$.latencyMs").value(125))
 				.andExpect(jsonPath("$.inputTokens").value(12))
@@ -439,7 +440,7 @@ class IncidentControllerTests {
 	@Test
 	void analysisPreservesMissingUsageAsJsonNull() throws Exception {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
-		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult("Analysis", "fake", "model",
+		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult("Analysis", "fake", "model", "incident-analysis-v1",
 				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null));
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
@@ -492,7 +493,7 @@ class IncidentControllerTests {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
 		when(gateway.analyze(any())).thenAnswer(invocation -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-			return new IncidentAnalysisResult("Analysis", "fake", "model", Instant.EPOCH, 1, null, null, null);
+			return new IncidentAnalysisResult("Analysis", "fake", "model", "incident-analysis-v1", Instant.EPOCH, 1, null, null, null);
 		});
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();

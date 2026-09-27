@@ -44,7 +44,8 @@ a provider-neutral gateway. Analysis results are returned without persistence.
 - GitHub Actions
 
 Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
-until the later integration spike validates real provider behavior.
+pending structured-output and timeout validation. The live smoke test on
+2026-09-27 succeeded with gpt-6-luna; see ADR-003 for the recorded evidence.
 
 ## Architecture
 
@@ -139,6 +140,7 @@ Only the stored title and description are sent to the AI gateway. A successful
   "content": "Check database connectivity.",
   "provider": "openai",
   "model": "gpt-6-luna",
+  "promptVersion": "incident-analysis-v1",
   "generatedAt": "2026-09-27T12:00:00Z",
   "latencyMs": 1250,
   "inputTokens": 120,
@@ -196,6 +198,8 @@ Local defaults are provided for development:
 | `DB_PASSWORD` | `dev_assist` |
 | `OPENAI_API_KEY` | Required; no production default |
 | `OPENAI_MODEL` | `gpt-6-luna` |
+| `AI_PROMPT_VERSION` | `incident-analysis-v1` |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `450` |
 
 The defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -212,6 +216,17 @@ constructs the client but does not contact OpenAI. All tests use a fictional key
 and a loopback base URL; endpoint tests replace the gateway and adapter tests mock
 the model. No OpenAI account
 or tokens are required for `./mvnw clean verify`.
+
+Prompts are loaded at startup from `prompts/incident-analysis/v1/system.st` and
+`user.st`. `app.ai.prompt-version` identifies the immutable template pair and is
+returned as `promptVersion`. Only `incident-analysis-v1` is currently supported;
+blank or unknown versions fail startup. New behavior requires a new version.
+
+`app.ai.max-output-tokens` accepts 1–16384 tokens (an application guardrail, not a
+claim about every model's capacity). The adapter sets OpenAI `maxCompletionTokens`
+for every request. No temperature is set. The 450-token default and concise prompt
+address the overly long first smoke-test response. For reasoning models, the limit
+also budgets reasoning tokens: visible output can be shorter or truncated.
 
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
 
@@ -236,7 +251,7 @@ AI capabilities are added only when they solve a concrete product problem.
 The current AI step provides synchronous, unstructured analysis.
 
 - analysis is synchronous and results are not persisted;
-- real model availability and response behavior have not been validated;
+- the new prompt and token limit have offline coverage but have not been live-tested;
 - no authentication or authorization;
 - no vector search;
 - no operational tools;

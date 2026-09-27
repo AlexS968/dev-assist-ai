@@ -103,14 +103,41 @@ The integration spike must demonstrate:
 - replacement with a fake implementation in automated tests;
 - access to response usage metadata.
 
+## Integration spike evidence — 2026-09-27
+
+The project owner reported a successful live smoke test:
+
+| Observation | Value |
+|---|---|
+| Endpoint | `POST /api/v1/incidents/{id}/analysis` |
+| HTTP status | 200 |
+| Provider | openai |
+| Model | gpt-6-luna |
+| Input tokens | 71 |
+| Output tokens | 591 |
+| Total tokens | 662 |
+| Latency | 7817 ms |
+| Independent confirmation | Call confirmed in OpenAI Usage |
+
+This records the supplied result; no repeat live request was performed for the
+prompt-versioning step. No credentials, full prompt or full AI response are recorded.
+The call preceded versioned templates and the new output-token limit.
+
+Observed limitation: the first answer was longer than desired. This motivates
+`incident-analysis-v1`, concise response instructions and a configurable completion
+budget of 450 tokens by default. The revised prompt and limit are tested offline;
+their effect on live answer quality has not yet been measured.
+
+Acceptance evidence now covers a successful model call, response usage metadata,
+fake replacement in automated tests, and sanitized provider-error handling.
+Structured-output conversion and explicit timeout validation remain unproven.
+The status therefore remains **Proposed**; accepting the ADR now would omit two
+of its existing validation criteria. Those criteria are not weakened by this step.
+
+See [implementation boundaries](../architecture/ai-integration.md).
+
 ## Revisit when
 
-Phase 2 infrastructure step (2026-09-27): Spring AI 2.0.1 and the official
-OpenAI starter are wired behind `IncidentAnalysisGateway`. Offline unit/context
-tests cover construction and configuration; no live model call has been made.
-See [implementation boundaries](../architecture/ai-integration.md). This is
-partial validation only, so the status remains `Proposed`.
-
-Change the status to `Accepted` after the integration spike satisfies the
+Change the status to `Accepted` after the integration spike satisfies the remaining
 validation criteria. Reject or supersede this ADR if Spring AI cannot meet the
 required behavior without excessive workarounds.

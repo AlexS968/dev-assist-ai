@@ -33,6 +33,8 @@ spring:
 app:
   ai:
     model: ${OPENAI_MODEL:gpt-6-luna}
+    prompt-version: ${AI_PROMPT_VERSION:incident-analysis-v1}
+    max-output-tokens: ${OPENAI_MAX_OUTPUT_TOKENS:450}
 
 management:
   endpoints:

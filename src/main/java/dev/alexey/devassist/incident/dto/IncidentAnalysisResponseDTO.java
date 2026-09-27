@@ -11,6 +11,8 @@ public record IncidentAnalysisResponseDTO(
 		String provider,
 		@Schema(description = "Model reported by the provider, or configured model when absent", example = "gpt-6-luna")
 		String model,
+		@Schema(description = "Stable identifier of the prompt templates used for this analysis", example = "incident-analysis-v1")
+		String promptVersion,
 		@Schema(description = "UTC time when the application received the analysis", example = "2026-09-27T12:00:00Z")
 		Instant generatedAt,
 		@Schema(description = "Elapsed model call time in milliseconds, measured with a monotonic clock", example = "1250")

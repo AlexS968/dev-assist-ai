@@ -13,7 +13,13 @@ import org.springframework.context.annotation.Configuration;
 public class AiConfiguration {
 
 	@Bean
-	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel, AiProperties properties) {
-		return new OpenAiIncidentAnalysisGateway(chatModel, properties.model(), Clock.systemUTC(), System::nanoTime);
+	IncidentAnalysisPrompt incidentAnalysisPrompt(AiProperties properties) {
+		return new IncidentAnalysisPrompt(properties.promptVersion());
+	}
+
+	@Bean
+	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel, AiProperties properties,
+			IncidentAnalysisPrompt prompt) {
+		return new OpenAiIncidentAnalysisGateway(chatModel, properties, prompt, Clock.systemUTC(), System::nanoTime);
 	}
 }
