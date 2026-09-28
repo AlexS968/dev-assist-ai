@@ -252,3 +252,10 @@ Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
 No repeat live request was made for timeout implementation. Timeout wiring and
 error translation are tested offline; structured-output conversion remains
 outstanding, so ADR-003 remains Proposed.
+
+## Phase 3 foundation
+
+The independent [structured analysis contract](structured-incident-analysis.md)
+now defines immutable candidate records and full-graph validation. It is not wired
+into either adapter or the REST endpoint yet; provider structured-output conversion
+remains outstanding and ADR-003 remains Proposed.
