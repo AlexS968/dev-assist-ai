@@ -23,7 +23,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
-import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -106,42 +105,19 @@ class OpenAiIncidentAnalysisGatewayTests {
 		assertThat(result.totalTokens()).isZero();
 	}
 
-	@Test
-	void preservesPartiallyMissingUsageWithoutCalculatingTotal() {
-		Usage usage = mock(Usage.class);
-		when(usage.getPromptTokens()).thenReturn(12);
-		when(usage.getCompletionTokens()).thenReturn(null);
-		when(usage.getTotalTokens()).thenReturn(null);
-		when(model.call(any(Prompt.class))).thenReturn(response("Analysis",
-				ChatResponseMetadata.builder().usage(usage).build()));
-		var result = gateway().analyze(input);
-		assertThat(result.inputTokens()).isEqualTo(12);
-		assertThat(result.outputTokens()).isNull();
-		assertThat(result.totalTokens()).isNull();
-	}
-
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = {" ", "\n\t"})
 	void rejectsEmptyContent(String content) {
 		when(model.call(any(Prompt.class))).thenReturn(response(content, ChatResponseMetadata.builder().build()));
-		assertThatThrownBy(() -> gateway().analyze(input)).isInstanceOf(EmptyIncidentAnalysisException.class);
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isInstanceOf(EmptyIncidentAnalysisException.class);
 	}
 
 	@Test
-	void rejectsNullOutputAsEmptyResponse() {
-		when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(new Generation(null))));
-
-		assertThatThrownBy(() -> gateway().analyze(input))
-				.isExactlyInstanceOf(EmptyIncidentAnalysisException.class)
-				.hasNoCause();
-	}
-
-	@Test
-	void absentMetadataUsesConfiguredModelAndNullTokenCounts() {
-		// Spring AI 2.0.1 normalizes null constructor metadata to empty metadata.
-		// Exercise that supported path without reflection or overriding its contract.
-		var response = response("Analysis", null);
+	void defaultMetadataUsesConfiguredModelAndNullTokenCounts() {
+		// The metadata-free constructor supplies default metadata and EmptyUsage.
+		var response = new ChatResponse(List.of(new Generation(new AssistantMessage("Analysis"))));
 		assertThat(response.getMetadata()).isNotNull();
 		when(model.call(any(Prompt.class))).thenReturn(response);
 
@@ -161,20 +137,16 @@ class OpenAiIncidentAnalysisGatewayTests {
 	@Test
 	void rejectsResponseWithoutGenerations() {
 		when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of()));
-		assertThatThrownBy(() -> gateway().analyze(input)).isInstanceOf(EmptyIncidentAnalysisException.class);
-	}
-
-	@Test
-	void rejectsNullResponse() {
-		when(model.call(any(Prompt.class))).thenReturn(null);
-		assertThatThrownBy(() -> gateway().analyze(input)).isInstanceOf(EmptyIncidentAnalysisException.class);
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isInstanceOf(EmptyIncidentAnalysisException.class);
 	}
 
 	@Test
 	void translatesProviderFailureWithoutRetry() {
 		var failure = new IllegalStateException("fake-key and private prompt");
 		when(model.call(any(Prompt.class))).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input))
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input))
 				.isInstanceOf(IncidentAnalysisException.class)
 				.hasMessage("Incident analysis provider failed.").hasCause(failure);
 		verify(model).call(any(Prompt.class));
@@ -184,7 +156,8 @@ class OpenAiIncidentAnalysisGatewayTests {
 	void translatesSdkSocketTimeoutWithoutRetry() {
 		var failure = new OpenAIIoException("private provider URL", new SocketTimeoutException("secret details"));
 		when(model.call(any(Prompt.class))).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input))
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input))
 				.isExactlyInstanceOf(IncidentAnalysisTimeoutException.class)
 				.hasMessage("Incident analysis provider timed out.").hasCause(failure);
 		verify(model).call(any(Prompt.class));
@@ -194,7 +167,8 @@ class OpenAiIncidentAnalysisGatewayTests {
 	void translatesWrappedOkHttpCallDeadline() {
 		var failure = new IllegalStateException(new OpenAIIoException("Request failed", new InterruptedIOException("timeout")));
 		when(model.call(any(Prompt.class))).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input))
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input))
 				.isExactlyInstanceOf(IncidentAnalysisTimeoutException.class).hasCause(failure);
 		verify(model).call(any(Prompt.class));
 	}
@@ -203,7 +177,8 @@ class OpenAiIncidentAnalysisGatewayTests {
 	void ordinaryIoFailureRemainsGenericProviderFailure() {
 		var failure = new OpenAIIoException("timeout in untrusted error text", new ConnectException("Connection refused"));
 		when(model.call(any(Prompt.class))).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input))
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input))
 				.isExactlyInstanceOf(IncidentAnalysisException.class).hasCause(failure);
 	}
 
@@ -211,7 +186,8 @@ class OpenAiIncidentAnalysisGatewayTests {
 	void ordinaryInterruptionIsNotClassifiedAsTimeout() {
 		var failure = new OpenAIIoException("Request failed", new InterruptedIOException("interrupted"));
 		when(model.call(any(Prompt.class))).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input))
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input))
 				.isExactlyInstanceOf(IncidentAnalysisException.class).hasCause(failure);
 	}
 

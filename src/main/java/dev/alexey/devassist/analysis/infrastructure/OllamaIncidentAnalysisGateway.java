@@ -53,14 +53,13 @@ public final class OllamaIncidentAnalysisGateway implements IncidentAnalysisGate
 			throw new IncidentAnalysisException(exception);
 		}
 		long latency = TimeUnit.NANOSECONDS.toMillis(nanoTime.getAsLong() - started);
-		if (response == null || response.message() == null
-				|| response.message().content() == null || response.message().content().isBlank()) {
+		if (response.message().content() == null || response.message().content().isBlank()) {
 			throw new EmptyIncidentAnalysisException();
 		}
 		String model = response.model();
 		// Ollama does not report a total count; do not manufacture one.
 		return new IncidentAnalysisResult(response.message().content(), "ollama",
-				model == null || model.isBlank() ? properties.ollamaModel() : model,
+				model.isBlank() ? properties.ollamaModel() : model,
 				prompt.version(), clock.instant(), latency, response.promptEvalCount(), response.evalCount(), null);
 	}
 }

@@ -56,23 +56,24 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 			throw new IncidentAnalysisException(exception);
 		}
 		long latencyMs = TimeUnit.NANOSECONDS.toMillis(nanoTime.getAsLong() - started);
-		if (response == null || response.getResult() == null) {
+		return toAnalysisResult(response, latencyMs);
+	}
+
+	private IncidentAnalysisResult toAnalysisResult(ChatResponse response, long latencyMs) {
+		if (response.getResult() == null) {
 			throw new EmptyIncidentAnalysisException();
 		}
 		var output = response.getResult().getOutput();
-		if (output == null) {
-			throw new EmptyIncidentAnalysisException();
-		}
 		String content = output.getText();
 		if (content == null || content.isBlank()) {
 			throw new EmptyIncidentAnalysisException();
 		}
 		var metadata = response.getMetadata();
-		var usage = metadata != null ? metadata.getUsage() : null;
-		boolean hasUsage = usage != null && !(usage instanceof EmptyUsage);
-		String model = metadata != null ? metadata.getModel() : null;
+		var usage = metadata.getUsage();
+		boolean hasUsage = !(usage instanceof EmptyUsage);
+		String model = metadata.getModel();
 		return new IncidentAnalysisResult(content, "openai",
-				model == null || model.isBlank() ? configuredModel : model,
+				model.isBlank() ? configuredModel : model,
 				prompt.version(), clock.instant(), latencyMs,
 				hasUsage ? usage.getPromptTokens() : null,
 				hasUsage ? usage.getCompletionTokens() : null,

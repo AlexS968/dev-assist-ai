@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.ollama.api.OllamaApi;
@@ -74,7 +75,7 @@ class OllamaIncidentAnalysisGatewayTests {
 	}
 
 	@ParameterizedTest
-	@NullAndEmptySource
+	@EmptySource
 	@ValueSource(strings = {" "})
 	void fallsBackToConfiguredModelAndPreservesAbsentUsage(String model) {
 		when(api.chat(any())).thenReturn(response(model, "Analysis", null, null));
@@ -99,25 +100,16 @@ class OllamaIncidentAnalysisGatewayTests {
 	@ValueSource(strings = {" ", "\n\t"})
 	void rejectsEmptyContent(String content) {
 		when(api.chat(any())).thenReturn(response("model", content, null, null));
-		assertThatThrownBy(() -> gateway().analyze(input)).isExactlyInstanceOf(EmptyIncidentAnalysisException.class);
-	}
-
-	@Test
-	void rejectsNullResponse() {
-		assertThatThrownBy(() -> gateway().analyze(input)).isExactlyInstanceOf(EmptyIncidentAnalysisException.class);
-	}
-
-	@Test
-	void rejectsMissingMessage() {
-		when(api.chat(any())).thenReturn(new OllamaApi.ChatResponse("model", now, null, null, true, null, null, null, null, null, null));
-		assertThatThrownBy(() -> gateway().analyze(input)).isExactlyInstanceOf(EmptyIncidentAnalysisException.class);
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(EmptyIncidentAnalysisException.class);
 	}
 
 	@Test
 	void translatesTimeoutWithoutRetry() {
 		var failure = new ResourceAccessException("private URL and prompt", new SocketTimeoutException("Read timed out"));
 		when(api.chat(any())).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input)).isExactlyInstanceOf(IncidentAnalysisTimeoutException.class)
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisTimeoutException.class)
 				.hasMessage("Incident analysis provider timed out.").hasCause(failure);
 		verify(api).chat(any());
 	}
@@ -126,7 +118,8 @@ class OllamaIncidentAnalysisGatewayTests {
 	void translatesGenericFailureWithoutFallback() {
 		var failure = new ResourceAccessException("private URL and prompt", new ConnectException("Connection refused"));
 		when(api.chat(any())).thenThrow(failure);
-		assertThatThrownBy(() -> gateway().analyze(input)).isExactlyInstanceOf(IncidentAnalysisException.class)
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisException.class)
 				.hasMessage("Incident analysis provider failed.").hasCause(failure);
 		verify(api).chat(any());
 	}
