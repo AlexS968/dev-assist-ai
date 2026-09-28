@@ -414,6 +414,8 @@ class IncidentControllerTests {
 	@Test
 	void analyzesExistingIncidentOutsideTransactionWithoutChangingDatabase() throws Exception {
 		var incident = repository.save(new Incident("Database unavailable", "Connection failed", IncidentSource.API));
+		// No test transaction: reload committed state with PostgreSQL timestamp precision.
+		var beforeAnalysis = repository.findById(incident.getId()).orElseThrow();
 		var generatedAt = Instant.parse("2026-09-27T12:00:00Z");
 		when(gateway.analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed")))
 				.thenAnswer(invocation -> {
@@ -435,7 +437,8 @@ class IncidentControllerTests {
 				.andExpect(jsonPath("$.totalTokens").value(20));
 		verify(gateway).analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed"));
 		assertThat(repository.count()).isEqualTo(1);
-		assertThat(repository.findById(incident.getId()).orElseThrow()).usingRecursiveComparison().isEqualTo(incident);
+		var afterAnalysis = repository.findById(incident.getId()).orElseThrow();
+		assertThat(afterAnalysis).usingRecursiveComparison().isEqualTo(beforeAnalysis);
 	}
 
 	@Test
