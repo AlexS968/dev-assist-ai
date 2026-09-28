@@ -42,7 +42,7 @@ class AiConfigurationTests {
 			assertThat(context).hasNotFailed().hasSingleBean(IncidentAnalysisGateway.class);
 			assertThat(context.getBean(IncidentAnalysisGateway.class))
 					.isInstanceOf(OpenAiIncidentAnalysisGateway.class);
-			assertThat(context.getBean(AiProperties.class).model()).isEqualTo("gpt-6-luna");
+			assertThat(context.getBean(AiProperties.class).openAiModel()).isEqualTo("gpt-6-luna");
 			assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
 			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(450);
 			assertThat(context.getBean(IncidentAnalysisPrompt.class).version()).isEqualTo("incident-analysis-v1");
@@ -60,7 +60,7 @@ class AiConfigurationTests {
 	void modelCanBeOverriddenThroughEnvironmentPlaceholder() {
 		contextRunner.withPropertyValues("OPENAI_MODEL=test-model").run(context -> {
 			assertThat(context).hasNotFailed();
-			assertThat(context.getBean(AiProperties.class).model()).isEqualTo("test-model");
+			assertThat(context.getBean(AiProperties.class).openAiModel()).isEqualTo("test-model");
 			assertThat(context.getBean(OpenAiChatModel.class).getOptions().getModel())
 					.isEqualTo("test-model");
 		});
@@ -68,13 +68,13 @@ class AiConfigurationTests {
 
 	@Test
 	void rejectsBlankModelConfiguration() {
-		contextRunner.withPropertyValues("app.ai.model=").run(context ->
+		contextRunner.withPropertyValues("app.ai.openai-model=").run(context ->
 				assertThat(context).hasFailed());
 	}
 
 	@Test
 	void overridesPromptSettingsThroughEnvironmentPlaceholders() {
-		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v1", "OPENAI_MAX_OUTPUT_TOKENS=300")
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v1", "AI_MAX_OUTPUT_TOKENS=300")
 				.run(context -> {
 					assertThat(context).hasNotFailed();
 					assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
@@ -92,14 +92,14 @@ class AiConfigurationTests {
 	@ParameterizedTest
 	@ValueSource(ints = {-1, 0, 16385})
 	void rejectsInvalidOutputTokenLimit(int limit) {
-		contextRunner.withPropertyValues("OPENAI_MAX_OUTPUT_TOKENS=" + limit).run(context ->
+		contextRunner.withPropertyValues("AI_MAX_OUTPUT_TOKENS=" + limit).run(context ->
 				assertThat(context).hasFailed().getFailure().hasRootCauseInstanceOf(BindValidationException.class));
 	}
 
 	@ParameterizedTest
 	@ValueSource(ints = {1, 16384})
 	void acceptsOutputTokenLimitBoundaries(int limit) {
-		contextRunner.withPropertyValues("OPENAI_MAX_OUTPUT_TOKENS=" + limit).run(context -> {
+		contextRunner.withPropertyValues("AI_MAX_OUTPUT_TOKENS=" + limit).run(context -> {
 			assertThat(context).hasNotFailed();
 			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(limit);
 		});

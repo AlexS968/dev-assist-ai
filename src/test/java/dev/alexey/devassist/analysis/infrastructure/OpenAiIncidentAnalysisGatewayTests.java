@@ -42,7 +42,7 @@ class OpenAiIncidentAnalysisGatewayTests {
 
 	private OpenAiIncidentAnalysisGateway gateway() {
 		var ticks = new AtomicLong(100_000_000L);
-		return new OpenAiIncidentAnalysisGateway(model, new AiProperties("configured-model", "incident-analysis-v1", 321, Duration.ofSeconds(20)),
+		return new OpenAiIncidentAnalysisGateway(model, new AiProperties("configured-model", "incident-analysis-v1", 321, Duration.ofSeconds(20), "openai", "qwen3:14b", "http://localhost:11434"),
 				new IncidentAnalysisPrompt("incident-analysis-v1"),
 				Clock.fixed(NOW, ZoneOffset.UTC), () -> ticks.getAndAdd(125_000_000L));
 	}

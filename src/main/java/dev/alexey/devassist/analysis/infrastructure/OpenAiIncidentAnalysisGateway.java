@@ -33,7 +33,7 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 	public OpenAiIncidentAnalysisGateway(ChatModel chatModel, AiProperties properties,
 			IncidentAnalysisPrompt prompt, Clock clock, LongSupplier nanoTime) {
 		this.chatModel = chatModel;
-		this.configuredModel = properties.model();
+		this.configuredModel = properties.openAiModel();
 		this.maxOutputTokens = properties.maxOutputTokens();
 		this.prompt = prompt;
 		this.clock = clock;

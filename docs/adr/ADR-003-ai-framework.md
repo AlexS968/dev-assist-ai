@@ -147,7 +147,38 @@ No additional live call was made for timeout implementation. No total-token valu
 is asserted for the second test because it was not supplied. No credentials,
 full prompt or full response are included.
 
-Acceptance evidence now covers successful model calls, usage metadata, fake
+### First live Ollama application smoke test — 2026-09-27
+
+The project owner reported the first successful Ollama call through the application:
+
+| Observation | Value |
+|---|---|
+| Endpoint | `POST /api/v1/incidents/{id}/analysis` |
+| HTTP status | 200 |
+| Provider | ollama |
+| Model | qwen3:14b |
+| Prompt version | incident-analysis-v1 |
+| Latency | 11144 ms |
+| Input tokens | 158 |
+| Output tokens | 285 |
+| Total tokens | null |
+| Smoke-test `AI_TIMEOUT` | 60s |
+| Output limit | 450, respected |
+| Completion | Answer complete |
+| OpenAI API usage for this call | None |
+
+The 60s timeout was a smoke-test override; the application default remains 20s.
+The null total is preserved, not synthesized from the reported input/output counts.
+No new live call was made to record this evidence. No credentials, full prompt,
+incident description or full model response are retained here.
+
+Quality observation: the response was useful and structured in presentation, but
+some hypotheses were more general and speculative than in the observed OpenAI
+response. This is a single observation, not a benchmark or a general provider
+ranking. Comparative evaluation will be a separate phase. Structured presentation
+does not establish schema-validated structured output, which is still absent.
+
+Acceptance evidence now covers successful OpenAI and Ollama model calls, usage metadata, fake
 replacement, safe provider-error handling, and offline transport-timeout wiring
 and 504 translation. Tests inspect actual OkHttp timeout configuration and simulate
 transport exceptions without network calls or sleep. Live timeout expiry has not

@@ -64,11 +64,96 @@ Without this, AI brings Jakarta 2.2.38 and the SDK brings non-Jakarta 2.2.31
 with duplicate classes; `/v3/api-docs` fails with `Schema.$dynamicRef()` missing.
 The existing OpenAPI test covers this compatibility regression.
 
-`OPENAI_API_KEY` is required at application startup; there is no production
+`OPENAI_API_KEY` is required only when `app.ai.provider=openai`; there is no production
 fallback key. `.env.example` is illustrative and is not automatically loaded.
 Only chat is enabled; embedding, image, moderation, speech and transcription
 auto-configurations are disabled. SDK retries are explicitly set to zero.
 No sampling parameters are imposed on the selected model.
+
+## Explicit provider selection
+
+`app.ai.provider=${AI_PROVIDER:openai}` is validated against exactly `openai|ollama`.
+Conditional configuration registers exactly one IncidentAnalysisGateway: the
+existing OpenAI implementation or OllamaIncidentAnalysisGateway. Controller and
+services are unchanged and do not import provider classes. There is no fallback.
+The OpenAI gateway resolves and validates the key only in its selected configuration.
+An Ollama-only application can start with OPENAI_API_KEY completely absent.
+
+| Setting | Environment variable | Default |
+|---|---|---|
+| `app.ai.provider` | `AI_PROVIDER` | `openai` |
+| `app.ai.openai-model` (OpenAI) | `OPENAI_MODEL` | `gpt-6-luna` |
+| `app.ai.ollama-model` | `OLLAMA_MODEL` | `qwen3:14b` |
+| `app.ai.ollama-base-url` | `OLLAMA_BASE_URL` | `http://localhost:11434` |
+
+Both official starters use Spring AI BOM 2.0.1. Swagger annotations are excluded
+from the Ollama starter too, leaving springdoc's matching Jakarta 2.2.55 artifacts.
+Dependency tree inspection and the existing OpenAPI test check compatibility.
+
+### Ollama adapter and transport
+
+The adapter uses official Spring AI `OllamaApi.chat` with `stream=false` and the
+same versioned system/user resources. It uses `OllamaChatOptions.numPredict` and
+`disableThinking()`; the latter becomes top-level `think=false`. There is no hidden
+prompt directive, temperature or tool configuration. This targets qwen3:14b; a
+replacement model must support the chosen Ollama options.
+
+OllamaChatModel in Spring AI 2.0.1 normalizes absent token counts to zero and applies
+a retry template. To preserve the gateway contract, the adapter instead uses the
+low-level official API. OllamaApi/Chat auto-configurations are excluded and the API
+is constructed only by the selected OllamaConfiguration. No automatic model pull,
+model-level retry, fallback or extra chat model bean is created.
+
+The raw response preserves nullable `prompt_eval_count` and `eval_count` as input
+and output tokens. Ollama provides no total count, so totalTokens is null rather
+than synthesized. Missing response/model/content, application receipt time and
+monotonic latency follow the existing gateway contract. Transport SocketTimeoutException
+causes become IncidentAnalysisTimeoutException; other errors are sanitized as before.
+
+OllamaApi accepts a RestClient.Builder. The selected builder uses Spring Framework
+7.0.9 SimpleClientHttpRequestFactory, configured with app.ai.timeout for both
+connect and read. It delegates to synchronous HttpURLConnection connect/read
+socket timeouts and introduces no application executor or detached future. Unlike
+OpenAI's whole-call deadline, the Ollama read timeout applies to each blocking read;
+a slowly progressing response can take longer than the configured duration.
+
+On macOS run Ollama outside Docker for Apple Silicon acceleration. The model must
+already be installed. For an application inside Docker Desktop, use
+`OLLAMA_BASE_URL=http://host.docker.internal:11434` as appropriate for host access.
+Cold loading a 14B model can exceed the default 20s timeout. The first application
+Ollama smoke test succeeded with an explicit 60s override; see the recorded result
+below. No additional live Ollama/OpenAI call was made to document it.
+
+### First live Ollama application smoke test — 2026-09-27
+
+The project owner reported the first successful Ollama call through the application:
+
+| Observation | Value |
+|---|---|
+| Endpoint | `POST /api/v1/incidents/{id}/analysis` |
+| HTTP status | 200 |
+| Provider | ollama |
+| Model | qwen3:14b |
+| Prompt version | incident-analysis-v1 |
+| Latency | 11144 ms |
+| Input tokens | 158 |
+| Output tokens | 285 |
+| Total tokens | null |
+| Smoke-test `AI_TIMEOUT` | 60s |
+| Output limit | 450, respected |
+| Completion | Answer complete |
+| OpenAI API usage for this call | None |
+
+The 60s timeout was a smoke-test override; the application default remains 20s.
+The null total is preserved, not synthesized from the reported input/output counts.
+No new live call was made to record this evidence. No credentials, full prompt,
+incident description or full model response are retained here.
+
+Quality observation: the response was useful and structured in presentation, but
+some hypotheses were more general and speculative than in the observed OpenAI
+response. This is a single observation, not a benchmark or a general provider
+ranking. Comparative evaluation will be a separate phase. Structured presentation
+does not establish schema-validated structured output, which is still absent.
 
 ## Versioned prompt contract
 
@@ -91,7 +176,7 @@ new directory and explicitly register a new identifier, rather than rewriting v1
 | Application property | Environment variable | Default | Validation |
 |---|---|---|---|
 | `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v1` | Nonblank, registered version |
-| `app.ai.max-output-tokens` | `OPENAI_MAX_OUTPUT_TOKENS` | `450` | Integer, 1–16384 |
+| `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `450` | Integer, 1–16384 |
 
 The upper bound is an application guardrail; provider/model capabilities can be
 more restrictive. OpenAI-specific `maxCompletionTokens` is applied to each request
@@ -147,8 +232,9 @@ literal substitutions, capture real OpenAiChatOptions with the configured limit,
 and verify configuration defaults, overrides and invalid values. MockMvc tests replace the gateway with a mock and cover 200/404/502/504,
 JSON null usage, unchanged incident data and transaction suspension/restoration.
 The OpenAPI test checks the new operation, response codes and DTO descriptions/examples.
-All contexts use fictional credentials and a loopback URL. No test sends a real
-OpenAI request or consumes tokens.
+OpenAI test contexts use fictional credentials and a loopback URL. Ollama contexts
+start with no OpenAI key, and unit tests mock OllamaApi. No test sends a real
+provider request or consumes tokens.
 
 The adapter explicitly rejects null generation output as an empty response and
 defensively handles null metadata with the configured model and null token counts.
@@ -158,7 +244,7 @@ produce a null getter result. The missing-metadata test exercises this construct
 path without reflection; a separate test covers null generation output.
 
 There is no analysis persistence, structured output, retry/fallback policy, RAG,
-tool calling or Ollama integration. This endpoint is synchronous and has no new
+tool calling. This endpoint is synchronous and has no new
 rate limiting or authentication. Repeated requests generate fresh analyses.
 Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
 (see ADR-003). The second used incident-analysis-v1, took 5816 ms and produced

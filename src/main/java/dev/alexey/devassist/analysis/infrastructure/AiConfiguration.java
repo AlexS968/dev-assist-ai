@@ -4,6 +4,9 @@ import java.time.Clock;
 
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.core.env.Environment;
+import org.springframework.util.Assert;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,8 +21,10 @@ public class AiConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = "app.ai.provider", havingValue = "openai", matchIfMissing = true)
 	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel, AiProperties properties,
-			IncidentAnalysisPrompt prompt) {
+			IncidentAnalysisPrompt prompt, Environment environment) {
+		Assert.hasText(environment.getProperty("spring.ai.openai.api-key"), "OPENAI_API_KEY is required when app.ai.provider=openai");
 		return new OpenAiIncidentAnalysisGateway(chatModel, properties, prompt, Clock.systemUTC(), System::nanoTime);
 	}
 }
