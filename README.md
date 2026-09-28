@@ -13,11 +13,13 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 0 — Engineering foundation**
+**Phase 2 — Incident analysis service and REST endpoint**
 
 Currently implemented:
 
-- Java 21 and Spring Boot 4;
+- Java 21 and Spring Boot 4.1.1;
+- incident creation, retrieval, listing and status API;
+- Spring AI 2.0.1 OpenAI/Ollama adapters and offline tests;
 - PostgreSQL;
 - Flyway migrations;
 - Docker Compose development database;
@@ -27,7 +29,8 @@ Currently implemented:
 - non-root runtime container;
 - GitHub Actions CI.
 
-The incident API and AI capabilities are not implemented yet.
+The incident REST API includes synchronous analysis of an existing incident through
+a provider-neutral gateway. Analysis results are returned without persistence.
 
 ## Technology
 
@@ -40,8 +43,10 @@ The incident API and AI capabilities are not implemented yet.
 - Testcontainers
 - GitHub Actions
 
-Spring AI is the proposed AI framework and will be validated during the first
-LLM integration phase.
+Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
+pending structured-output validation. Transport timeout handling is tested offline. Live application smoke tests on
+2026-09-27 succeeded with gpt-6-luna and local qwen3:14b; see
+[ADR-003](docs/adr/ADR-003-ai-framework.md) for the recorded evidence.
 
 ## Architecture
 
@@ -76,7 +81,9 @@ Check its status:
 docker compose ps
 ```
 
-Run the application:
+For the default OpenAI provider, provide `OPENAI_API_KEY` in your shell or IDE
+environment. Alternatively, select `AI_PROVIDER=ollama` without a key (see Configuration).
+Then run the application:
 
 ```bash
 ./mvnw spring-boot:run
@@ -125,6 +132,37 @@ incident ID in `client.global`; subsequent requests reuse it. Re-run the scenari
 from creation to obtain a fresh incident. The final two requests intentionally
 return 409 and 400.
 
+## Incident analysis
+
+`POST /api/v1/incidents/{id}/analysis` takes an incident UUID and no request body.
+Only the stored title and description are sent to the AI gateway. A successful
+200 response has this shape (illustrative values):
+
+```json
+{
+  "content": "Check database connectivity.",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "promptVersion": "incident-analysis-v1",
+  "generatedAt": "2026-09-27T12:00:00Z",
+  "latencyMs": 1250,
+  "inputTokens": 120,
+  "outputTokens": 80,
+  "totalTokens": 200
+}
+```
+
+Unavailable token counts are `null`. `generatedAt` is application receipt time;
+latency uses a monotonic timer. The result is not saved and each POST generates
+a new analysis. Provider calls run outside DB transactions.
+
+Unknown incidents return the existing 404 `application/problem+json` response.
+Provider failures or empty content return 502 with the fixed detail
+`Incident analysis is temporarily unavailable.` Transport timeouts return 504 with
+`Incident analysis timed out. Please try again later.` Provider internals are not exposed.
+With real runtime credentials, this endpoint invokes the provider; automated tests
+use mocks and do not consume tokens.
+
 ## Running tests
 
 Docker must be running because integration tests use Testcontainers.
@@ -162,10 +200,80 @@ Local defaults are provided for development:
 | `DB_URL` | `jdbc:postgresql://localhost:5432/dev_assist` |
 | `DB_USERNAME` | `dev_assist` |
 | `DB_PASSWORD` | `dev_assist` |
+| `AI_PROVIDER` | `openai` (allowed: `openai`, `ollama`) |
+| `OPENAI_API_KEY` | Required only for `openai`; no default |
+| `OPENAI_MODEL` | `gpt-6-luna` |
+| `OLLAMA_MODEL` | `qwen3:14b` |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` |
+| `AI_PROMPT_VERSION` | `incident-analysis-v1` |
+| `AI_MAX_OUTPUT_TOKENS` | `450` |
+| `AI_TIMEOUT` | `20s` |
 
-The defaults are intended only for the local Docker Compose database. Deployed
+The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
 a secrets manager.
+
+Application-owned `app.ai.openai-model` binds `OPENAI_MODEL` and supplies
+`spring.ai.openai.chat.model`. The key is read directly from `OPENAI_API_KEY`;
+it is never stored in application properties or logged by application code.
+`.env.example` contains a fictional key. Spring Boot does not load `.env`
+automatically: export the variables or configure them in your IDE.
+
+Only the selected chat provider is wired. SDK retries remain disabled. Startup
+constructs clients but does not contact either provider or pull Ollama models. All tests use a fictional key
+and a loopback base URL where required; Ollama contexts need no key at all.
+Endpoint tests replace the gateway and adapter tests mock the model/API. No OpenAI account
+or tokens are required for `./mvnw clean verify`.
+
+Prompts are loaded at startup from `prompts/incident-analysis/v1/system.st` and
+`user.st`. `app.ai.prompt-version` identifies the immutable template pair and is
+returned as `promptVersion`. Only `incident-analysis-v1` is currently supported;
+blank or unknown versions fail startup. New behavior requires a new version.
+
+`app.ai.max-output-tokens` accepts 1–16384 tokens (an application guardrail, not a
+claim about every model's capacity). The adapters set OpenAI `maxCompletionTokens`
+or Ollama `num_predict` for every request. Ollama sends the official `think=false`
+option, supported by qwen3, without modifying the prompt. No temperature is set. The 450-token default and concise prompt
+address the overly long first smoke-test response. For reasoning models, the limit
+also budgets reasoning tokens: visible output can be shorter or truncated.
+
+`app.ai.timeout` is a Duration (for example `20s`, `750ms` or `PT20S`). It is
+required and validated from 1 ms to 2147483647 ms, the supported OkHttp range;
+blank, zero and negative values fail startup. It feeds `spring.ai.openai.timeout`
+and the SDK/OkHttp whole-call deadline for OpenAI. For Ollama it configures
+synchronous HTTP connect/read timeouts; these bound connection establishment and
+each blocking read, not the total wall-clock call. No background future timeout is used and
+SDK retries remain zero. Cancelling the local call cannot guarantee that the
+provider stops processing or billing work already received.
+
+Switch manually in the shell or IDE environment before restarting the application:
+
+```bash
+# Local Ollama: no OPENAI_API_KEY is needed.
+unset OPENAI_API_KEY
+export AI_PROVIDER=ollama
+export OLLAMA_MODEL=qwen3:14b
+export OLLAMA_BASE_URL=http://localhost:11434
+```
+
+To switch back, set `AI_PROVIDER=openai` and provide `OPENAI_API_KEY` securely in
+your environment. `OPENAI_MODEL` defaults to `gpt-6-luna`. Selection is explicit;
+there is exactly one gateway and no automatic fallback. Unknown providers fail startup.
+`AI_MAX_OUTPUT_TOKENS` sets the shared output limit for both providers.
+All providers share `AI_PROMPT_VERSION` and `AI_TIMEOUT`.
+
+Run Ollama natively on macOS, outside Docker, to use Apple Silicon acceleration.
+The model must already be installed; the application does not pull it. If this
+application runs in Docker Desktop, set `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+and configure host access appropriately. A 14B model may need a longer timeout on
+cold start. The first live application Ollama smoke test on 2026-09-27 returned
+HTTP 200 in 11144 ms with 285 output tokens within the 450-token limit and a
+complete response, using `AI_TIMEOUT=60s`. OpenAI was not used for that call.
+This is integration evidence, not a comparative quality benchmark.
+Ollama reports input/output counts separately; absent counts, including an
+unreported total, are returned as null.
+
+See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
 
 ## Roadmap
 
@@ -185,10 +293,10 @@ AI capabilities are added only when they solve a concrete product problem.
 
 ## Known limitations
 
-The current phase provides infrastructure only.
+The current AI step provides synchronous, unstructured analysis.
 
-- no incident REST endpoints;
-- no LLM integration;
+- analysis is synchronous and results are not persisted;
+- prompt v1 and the 450-token limit passed a second live smoke test; timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
 - no vector search;
 - no operational tools;

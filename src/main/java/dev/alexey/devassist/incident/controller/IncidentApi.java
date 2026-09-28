@@ -1,5 +1,6 @@
 package dev.alexey.devassist.incident.controller;
 
+import dev.alexey.devassist.incident.dto.IncidentAnalysisResponseDTO;
 import dev.alexey.devassist.incident.dto.CreateIncidentRequestDTO;
 import dev.alexey.devassist.incident.dto.IncidentPageResponseDTO;
 import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
@@ -66,4 +67,17 @@ public interface IncidentApi {
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 	IncidentResponseDTO updateStatus(@Parameter(description = "Incident UUID") @PathVariable UUID id,
 			@Valid @RequestBody UpdateIncidentStatusRequestDTO request);
+
+	@PostMapping("/{id}/analysis")
+	@Operation(summary = "Analyze an existing incident",
+			description = "Generates analysis from the incident title and description. The result is not persisted.")
+	@ApiResponse(responseCode = "200", description = "Analysis generated",
+			content = @Content(mediaType = "application/json", schema = @Schema(implementation = IncidentAnalysisResponseDTO.class)))
+	@ApiResponse(responseCode = "404", description = "Incident does not exist",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+	@ApiResponse(responseCode = "502", description = "Analysis provider failed or returned empty content",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+	@ApiResponse(responseCode = "504", description = "Analysis provider timed out",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+	IncidentAnalysisResponseDTO analyze(@Parameter(description = "Incident UUID") @PathVariable UUID id);
 }

@@ -103,8 +103,92 @@ The integration spike must demonstrate:
 - replacement with a fake implementation in automated tests;
 - access to response usage metadata.
 
+## Integration spike evidence — 2026-09-27
+
+The project owner reported a successful live smoke test:
+
+| Observation | Value |
+|---|---|
+| Endpoint | `POST /api/v1/incidents/{id}/analysis` |
+| HTTP status | 200 |
+| Provider | openai |
+| Model | gpt-6-luna |
+| Input tokens | 71 |
+| Output tokens | 591 |
+| Total tokens | 662 |
+| Latency | 7817 ms |
+| Independent confirmation | Call confirmed in OpenAI Usage |
+
+This records the supplied result; no repeat live request was performed for the
+prompt-versioning step. No credentials, full prompt or full AI response are recorded.
+The call preceded versioned templates and the new output-token limit.
+
+Observed limitation: the first answer was longer than desired. This motivates
+`incident-analysis-v1`, concise response instructions and a configurable completion
+budget of 450 tokens by default. The second smoke test below validates the revised
+prompt and limit for one observed response.
+
+### Second live smoke test — 2026-09-27
+
+The project owner supplied these additional observations:
+
+| Observation | Value |
+|---|---|
+| HTTP status | 200 |
+| Model | gpt-6-luna |
+| Prompt version | incident-analysis-v1 |
+| Latency | 5816 ms |
+| Input tokens | 141 |
+| Output tokens | 383 |
+| Output limit | 450, respected |
+| Completion | Answer complete, not truncated |
+
+No additional live call was made for timeout implementation. No total-token value
+is asserted for the second test because it was not supplied. No credentials,
+full prompt or full response are included.
+
+### First live Ollama application smoke test — 2026-09-27
+
+The project owner reported the first successful Ollama call through the application:
+
+| Observation | Value |
+|---|---|
+| Endpoint | `POST /api/v1/incidents/{id}/analysis` |
+| HTTP status | 200 |
+| Provider | ollama |
+| Model | qwen3:14b |
+| Prompt version | incident-analysis-v1 |
+| Latency | 11144 ms |
+| Input tokens | 158 |
+| Output tokens | 285 |
+| Total tokens | null |
+| Smoke-test `AI_TIMEOUT` | 60s |
+| Output limit | 450, respected |
+| Completion | Answer complete |
+| OpenAI API usage for this call | None |
+
+The 60s timeout was a smoke-test override; the application default remains 20s.
+The null total is preserved, not synthesized from the reported input/output counts.
+No new live call was made to record this evidence. No credentials, full prompt,
+incident description or full model response are retained here.
+
+Quality observation: the response was useful and structured in presentation, but
+some hypotheses were more general and speculative than in the observed OpenAI
+response. This is a single observation, not a benchmark or a general provider
+ranking. Comparative evaluation will be a separate phase. Structured presentation
+does not establish schema-validated structured output, which is still absent.
+
+Acceptance evidence now covers successful OpenAI and Ollama model calls, usage metadata, fake
+replacement, safe provider-error handling, and offline transport-timeout wiring
+and 504 translation. Tests inspect actual OkHttp timeout configuration and simulate
+transport exceptions without network calls or sleep. Live timeout expiry has not
+been measured. Structured-output conversion is still not implemented, so the
+status remains **Proposed** under the existing acceptance criteria.
+
+See [implementation boundaries](../architecture/ai-integration.md).
+
 ## Revisit when
 
-Change the status to `Accepted` after the integration spike satisfies the
+Change the status to `Accepted` after the integration spike satisfies the remaining
 validation criteria. Reject or supersede this ADR if Spring AI cannot meet the
 required behavior without excessive workarounds.

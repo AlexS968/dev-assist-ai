@@ -1,6 +1,6 @@
 # Current Architecture
 
-This document describes the architecture implemented at the end of Phase 0.
+This document describes the architecture through the first infrastructure step of Phase 2.
 It intentionally shows only existing components. Planned AI capabilities are
 documented in the project roadmap and are not presented as implemented.
 
@@ -66,6 +66,8 @@ It does not contain Maven, source code, or build tools.
 ## Implemented components
 
 - Spring Boot application;
+- incident REST API and persistence;
+- OpenAI adapter behind an application-owned analysis gateway (not invoked by REST);
 - PostgreSQL persistence infrastructure;
 - Flyway schema migrations;
 - Actuator health endpoints;
@@ -78,8 +80,8 @@ It does not contain Maven, source code, or build tools.
 
 The following components are not implemented yet:
 
-- incident REST API;
-- LLM integration;
+- analysis service orchestration and REST endpoint;
+- live LLM integration validation;
 - structured AI output;
 - embeddings and vector search;
 - retrieval-augmented generation;
@@ -89,3 +91,6 @@ The following components are not implemented yet:
 - production cloud deployment.
 
 They will be added incrementally when their product use cases are implemented.
+
+See [AI infrastructure](ai-integration.md) for configuration, component boundaries,
+offline tests, and the remaining validation work.

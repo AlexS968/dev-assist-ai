@@ -1,5 +1,8 @@
 package dev.alexey.devassist.incident.exception;
 
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
+
 import dev.alexey.devassist.incident.controller.IncidentController;
 
 import org.springframework.http.HttpStatus;
@@ -19,5 +22,17 @@ public class IncidentExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler(IncidentNotFoundException.class)
 	public ProblemDetail handleIncidentNotFound(IncidentNotFoundException exception) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+	}
+
+	@ExceptionHandler(IncidentAnalysisException.class)
+	public ProblemDetail handleIncidentAnalysisFailure(IncidentAnalysisException exception) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
+				"Incident analysis is temporarily unavailable.");
+	}
+
+	@ExceptionHandler(IncidentAnalysisTimeoutException.class)
+	public ProblemDetail handleIncidentAnalysisTimeout(IncidentAnalysisTimeoutException exception) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT,
+				"Incident analysis timed out. Please try again later.");
 	}
 }

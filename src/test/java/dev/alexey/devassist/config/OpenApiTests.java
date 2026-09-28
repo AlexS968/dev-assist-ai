@@ -44,7 +44,8 @@ class OpenApiTests {
 				"$.paths['/api/v1/incidents'].post",
 				"$.paths['/api/v1/incidents/{id}'].get",
 				"$.paths['/api/v1/incidents'].get",
-				"$.paths['/api/v1/incidents/{id}/status'].patch"
+				"$.paths['/api/v1/incidents/{id}/status'].patch",
+				"$.paths['/api/v1/incidents/{id}/analysis'].post"
 		};
 		for (String operation : operations) {
 			jsonPath(operation + ".summary").isNotEmpty().match(result);
@@ -58,8 +59,23 @@ class OpenApiTests {
 		jsonPath(operations[3] + ".responses['404']").exists().match(result);
 		jsonPath(operations[3] + ".responses['409']").exists().match(result);
 
+
+		jsonPath(operations[4] + ".responses['404'].content['application/problem+json']").exists().match(result);
+		jsonPath(operations[4] + ".responses['502'].content['application/problem+json']").exists().match(result);
+		jsonPath(operations[4] + ".responses['504'].content['application/problem+json']").exists().match(result);
+		jsonPath(operations[4] + ".responses['200'].content['application/json'].schema['$ref']")
+				.value("#/components/schemas/IncidentAnalysisResponseDTO").match(result);
+		jsonPath(operations[4] + ".requestBody").doesNotExist().match(result);
+		for (String field : new String[]{"content", "provider", "model", "promptVersion", "generatedAt", "latencyMs",
+				"inputTokens", "outputTokens", "totalTokens"}) {
+			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".description")
+					.isNotEmpty().match(result);
+			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".example")
+					.exists().match(result);
+		}
+
 		for (String schema : new String[]{"CreateIncidentRequestDTO", "IncidentResponseDTO",
-				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO"}) {
+				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO", "IncidentAnalysisResponseDTO"}) {
 			jsonPath("$.components.schemas." + schema).exists().match(result);
 		}
 		jsonPath("$.components.schemas.IncidentPageResponseDTO.properties.items.items['$ref']")
