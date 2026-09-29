@@ -1,6 +1,11 @@
 package dev.alexey.devassist.analysis.infrastructure;
 
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisConversionException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisValidationException;
+import org.junit.jupiter.params.provider.MethodSource;
+import dev.alexey.devassist.analysis.validation.IncidentAnalysisValidator;
+import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.*;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
@@ -34,10 +39,11 @@ class OllamaIncidentAnalysisGatewayTests {
 	private OllamaIncidentAnalysisGateway gateway() {
 		var ticks = new AtomicLong();
 		return new OllamaIncidentAnalysisGateway(api,
-				new AiProperties("gpt-6-luna", "incident-analysis-v1", 321, Duration.ofSeconds(20),
+				new AiProperties("gpt-6-luna", "incident-analysis-v2", 321, Duration.ofSeconds(20),
 						"ollama", "qwen3:14b", "http://localhost:11434"),
-				new IncidentAnalysisPrompt("incident-analysis-v1"), Clock.fixed(now, ZoneOffset.UTC),
-				() -> ticks.getAndAdd(125_000_000));
+				new IncidentAnalysisPrompt("incident-analysis-v2"), Clock.fixed(now, ZoneOffset.UTC),
+				() -> ticks.getAndAdd(125_000_000),
+				new IncidentAnalysisConverter(new IncidentAnalysisValidator()), new IncidentAnalysisSchema());
 	}
 
 	@Test
@@ -48,12 +54,12 @@ class OllamaIncidentAnalysisGatewayTests {
 
 	@Test
 	void mapsMetadataAndSendsSeparatedPromptWithLimitAndThinkingDisabled() {
-		when(api.chat(any())).thenReturn(response("reported-model", "Analysis", 12, 8));
+		when(api.chat(any())).thenReturn(response("reported-model", JSON, 12, 8));
 		var result = gateway().analyze(input);
-		assertThat(result.content()).isEqualTo("Analysis");
+		assertThat(result.analysis()).isEqualTo(analysis());
 		assertThat(result.provider()).isEqualTo("ollama");
 		assertThat(result.model()).isEqualTo("reported-model");
-		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v1");
+		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v2");
 		assertThat(result.generatedAt()).isEqualTo(now);
 		assertThat(result.latencyMs()).isEqualTo(125);
 		assertThat(result.inputTokens()).isEqualTo(12);
@@ -64,9 +70,10 @@ class OllamaIncidentAnalysisGatewayTests {
 		var sent = request.getValue();
 		assertThat(sent.model()).isEqualTo("qwen3:14b");
 		assertThat(sent.stream()).isFalse();
+		assertThat(sent.format()).isEqualTo(new IncidentAnalysisSchema().asMap());
 		assertThat(sent.messages()).hasSize(2);
 		assertThat(sent.messages().getFirst().role()).isEqualTo(OllamaApi.Message.Role.SYSTEM);
-		assertThat(sent.messages().getFirst().content()).isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v1").system())
+		assertThat(sent.messages().getFirst().content()).isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v2").system())
 				.doesNotContain(input.title(), input.description());
 		assertThat(sent.messages().getLast().role()).isEqualTo(OllamaApi.Message.Role.USER);
 		assertThat(sent.messages().getLast().content()).isEqualTo("Title: " + input.title() + "\nDescription: " + input.description());
@@ -78,7 +85,7 @@ class OllamaIncidentAnalysisGatewayTests {
 	@EmptySource
 	@ValueSource(strings = {" "})
 	void fallsBackToConfiguredModelAndPreservesAbsentUsage(String model) {
-		when(api.chat(any())).thenReturn(response(model, "Analysis", null, null));
+		when(api.chat(any())).thenReturn(response(model, JSON, null, null));
 		var result = gateway().analyze(input);
 		assertThat(result.model()).isEqualTo("qwen3:14b");
 		assertThat(result.inputTokens()).isNull();
@@ -88,7 +95,7 @@ class OllamaIncidentAnalysisGatewayTests {
 
 	@Test
 	void preservesPartialUsageIncludingReportedZero() {
-		when(api.chat(any())).thenReturn(response("model", "Analysis", 0, null));
+		when(api.chat(any())).thenReturn(response("model", JSON, 0, null));
 		var result = gateway().analyze(input);
 		assertThat(result.inputTokens()).isZero();
 		assertThat(result.outputTokens()).isNull();
@@ -129,4 +136,24 @@ class OllamaIncidentAnalysisGatewayTests {
 				OllamaApi.Message.builder(OllamaApi.Message.Role.ASSISTANT).content(content).build(),
 				"stop", true, null, null, input, null, output, null);
 	}
+	@ParameterizedTest
+	@MethodSource("dev.alexey.devassist.analysis.infrastructure.IncidentAnalysisConverterTests#malformedProviderJson")
+	void rejectsInvalidProviderJsonWithoutRetry(String json) {
+		when(api.chat(any())).thenReturn(response("model", json, null, null));
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisConversionException.class)
+				.hasNoCause().hasMessageNotContaining("PRIVATE");
+		verify(api).chat(any());
+	}
+
+	@ParameterizedTest
+	@MethodSource("dev.alexey.devassist.analysis.infrastructure.IncidentAnalysisConverterTests#semanticallyInvalidJson")
+	void rejectsSemanticViolationsBeforeReturning(String json) {
+		when(api.chat(any())).thenReturn(response("model", json, null, null));
+		var gateway = gateway();
+		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisValidationException.class)
+				.hasNoCause();
+		verify(api).chat(any());
+	}
+
 }

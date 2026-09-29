@@ -13,13 +13,13 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 2 — Incident analysis service and REST endpoint**
+**Phase 3 — Native structured incident analysis**
 
 Currently implemented:
 
 - Java 21 and Spring Boot 4.1.1;
 - incident creation, retrieval, listing and status API;
-- Spring AI 2.0.1 OpenAI/Ollama adapters and offline tests;
+- Spring AI 2.0.1 OpenAI/Ollama adapters with native JSON schema and offline tests;
 - PostgreSQL;
 - Flyway migrations;
 - Docker Compose development database;
@@ -44,7 +44,7 @@ a provider-neutral gateway. Analysis results are returned without persistence.
 - GitHub Actions
 
 Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
-pending structured-output validation. Transport timeout handling is tested offline. Live application smoke tests on
+pending live structured-output validation. Transport timeout handling is tested offline. Live application smoke tests on
 2026-09-27 succeeded with gpt-6-luna and local qwen3:14b; see
 [ADR-003](docs/adr/ADR-003-ai-framework.md) for the recorded evidence.
 
@@ -140,10 +140,24 @@ Only the stored title and description are sent to the AI gateway. A successful
 
 ```json
 {
-  "content": "Check database connectivity.",
+  "analysis": {
+    "summary": "Database requests are timing out.",
+    "probableCauses": [{
+      "title": "Connection pool exhaustion",
+      "explanation": "Long-running queries may be holding connections.",
+      "likelihood": "MEDIUM",
+      "evidenceToCheck": ["Inspect active connection metrics."]
+    }],
+    "investigationSteps": [{
+      "order": 1,
+      "action": "Inspect pool metrics during the incident.",
+      "rationale": "Saturation would support the hypothesis."
+    }],
+    "uncertainties": ["Database logs are unavailable."]
+  },
   "provider": "openai",
   "model": "gpt-6-luna",
-  "promptVersion": "incident-analysis-v1",
+  "promptVersion": "incident-analysis-v2",
   "generatedAt": "2026-09-27T12:00:00Z",
   "latencyMs": 1250,
   "inputTokens": 120,
@@ -157,7 +171,7 @@ latency uses a monotonic timer. The result is not saved and each POST generates
 a new analysis. Provider calls run outside DB transactions.
 
 Unknown incidents return the existing 404 `application/problem+json` response.
-Provider failures or empty content return 502 with the fixed detail
+Provider failures, empty output, JSON conversion errors or semantic validation failures return 502 with the fixed detail
 `Incident analysis is temporarily unavailable.` Transport timeouts return 504 with
 `Incident analysis timed out. Please try again later.` Provider internals are not exposed.
 With real runtime credentials, this endpoint invokes the provider; automated tests
@@ -205,8 +219,8 @@ Local defaults are provided for development:
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `OLLAMA_MODEL` | `qwen3:14b` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` |
-| `AI_PROMPT_VERSION` | `incident-analysis-v1` |
-| `AI_MAX_OUTPUT_TOKENS` | `450` |
+| `AI_PROMPT_VERSION` | `incident-analysis-v2` |
+| `AI_MAX_OUTPUT_TOKENS` | `1000` |
 | `AI_TIMEOUT` | `20s` |
 
 The database defaults are intended only for the local Docker Compose database. Deployed
@@ -225,16 +239,17 @@ and a loopback base URL where required; Ollama contexts need no key at all.
 Endpoint tests replace the gateway and adapter tests mock the model/API. No OpenAI account
 or tokens are required for `./mvnw clean verify`.
 
-Prompts are loaded at startup from `prompts/incident-analysis/v1/system.st` and
+Prompts are loaded at startup from `prompts/incident-analysis/v2/system.st` and
 `user.st`. `app.ai.prompt-version` identifies the immutable template pair and is
-returned as `promptVersion`. Only `incident-analysis-v1` is currently supported;
-blank or unknown versions fail startup. New behavior requires a new version.
+returned as `promptVersion`. Only `incident-analysis-v2` is compatible with the structured runtime;
+blank, unknown and v1 versions fail startup. The v1 resources are retained for history. New behavior requires a new version.
 
 `app.ai.max-output-tokens` accepts 1–16384 tokens (an application guardrail, not a
 claim about every model's capacity). The adapters set OpenAI `maxCompletionTokens`
 or Ollama `num_predict` for every request. Ollama sends the official `think=false`
-option, supported by qwen3, without modifying the prompt. No temperature is set. The 450-token default and concise prompt
-address the overly long first smoke-test response. For reasoning models, the limit
+option, supported by qwen3, without modifying the prompt. No temperature is set. The default budget is now 1000 tokens to reduce JSON truncation.
+This permits higher cost and latency; it is a ceiling, not a target response length.
+`AI_MAX_OUTPUT_TOKENS` remains configurable. For reasoning models, the limit
 also budgets reasoning tokens: visible output can be shorter or truncated.
 
 `app.ai.timeout` is a Duration (for example `20s`, `750ms` or `PT20S`). It is
@@ -293,10 +308,19 @@ AI capabilities are added only when they solve a concrete product problem.
 
 ## Known limitations
 
-The current AI step provides synchronous, unstructured analysis.
+The current AI step provides synchronous, schema-constrained structured analysis.
+OpenAI uses native strict JSON Schema; Ollama uses the same schema via `format`.
+A dedicated Jackson reader rejects malformed/trailing JSON, unknown properties,
+missing/null required fields and coercion; application validation then checks the
+complete graph and step ordering. There is no retry, repair or fallback.
+The old `content` response field is removed. `likelihood` is qualitative model
+prioritization, not probability or measured confidence. No `rootCause` is asserted.
+See the [structured contract](docs/architecture/structured-incident-analysis.md).
 
 - analysis is synchronous and results are not persisted;
-- prompt v1 and the 450-token limit passed a second live smoke test; timeout expiry itself is tested without network I/O;
+- historical v1 smoke tests do not validate v2 structured output; ADR-003 remains Proposed until live structured smoke tests;
+- schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
+- timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
 - no vector search;
 - no operational tools;

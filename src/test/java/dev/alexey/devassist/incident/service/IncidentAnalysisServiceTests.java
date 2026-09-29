@@ -3,6 +3,7 @@ package dev.alexey.devassist.incident.service;
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.analysis;
 import dev.alexey.devassist.incident.entity.Incident;
 import dev.alexey.devassist.incident.enums.IncidentSource;
 import dev.alexey.devassist.incident.exception.IncidentNotFoundException;
@@ -30,7 +31,7 @@ class IncidentAnalysisServiceTests {
 		var incident = new Incident("Title", "Description", IncidentSource.MONITORING);
 		when(repository.findById(id)).thenReturn(Optional.of(incident));
 		var input = new IncidentAnalysisInput("Title", "Description");
-		var result = new IncidentAnalysisResult("Analysis", "fake", "test-model", "incident-analysis-v1",
+		var result = new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2",
 				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20);
 		when(gateway.analyze(input)).thenReturn(result);
 

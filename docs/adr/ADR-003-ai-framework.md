@@ -176,16 +176,26 @@ Quality observation: the response was useful and structured in presentation, but
 some hypotheses were more general and speculative than in the observed OpenAI
 response. This is a single observation, not a benchmark or a general provider
 ranking. Comparative evaluation will be a separate phase. Structured presentation
-does not establish schema-validated structured output, which is still absent.
+does not establish schema-validated structured output, which was absent at that stage.
 
 Acceptance evidence now covers successful OpenAI and Ollama model calls, usage metadata, fake
 replacement, safe provider-error handling, and offline transport-timeout wiring
 and 504 translation. Tests inspect actual OkHttp timeout configuration and simulate
 transport exceptions without network calls or sleep. Live timeout expiry has not
-been measured. Structured-output conversion is still not implemented, so the
-status remains **Proposed** under the existing acceptance criteria.
+been measured. At the end of Phase 2, structured-output conversion was not implemented,
+so the status remained **Proposed** under the existing acceptance criteria.
 
 See [implementation boundaries](../architecture/ai-integration.md).
+
+## Structured-output implementation — 2026-09-28
+
+Both providers now request the same canonical schema through native request options:
+OpenAI strict JSON Schema response format and Ollama `format`. A dedicated strict
+Jackson reader and application validator gate every returned analysis; REST now
+exposes `analysis` and metadata. Offline tests cover conversion, semantic rejection
+and safe errors. No live structured-output request was made and no retry/repair was
+added. Historical v1 smoke tests do not establish v2 behavior. Status remains
+**Proposed** pending real structured smoke tests for OpenAI and Ollama.
 
 ## Revisit when
 

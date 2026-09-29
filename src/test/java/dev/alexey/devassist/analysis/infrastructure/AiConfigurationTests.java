@@ -43,9 +43,9 @@ class AiConfigurationTests {
 			assertThat(context.getBean(IncidentAnalysisGateway.class))
 					.isInstanceOf(OpenAiIncidentAnalysisGateway.class);
 			assertThat(context.getBean(AiProperties.class).openAiModel()).isEqualTo("gpt-6-luna");
-			assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
-			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(450);
-			assertThat(context.getBean(IncidentAnalysisPrompt.class).version()).isEqualTo("incident-analysis-v1");
+			assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v2");
+			assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(1000);
+			assertThat(context.getBean(IncidentAnalysisPrompt.class).version()).isEqualTo("incident-analysis-v2");
 			assertThat(context.getBean(OpenAiChatModel.class).getOptions().getModel())
 					.isEqualTo("gpt-6-luna");
 			var properties = context.getBean(OpenAiCommonProperties.class);
@@ -74,10 +74,10 @@ class AiConfigurationTests {
 
 	@Test
 	void overridesPromptSettingsThroughEnvironmentPlaceholders() {
-		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v1", "AI_MAX_OUTPUT_TOKENS=300")
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v2", "AI_MAX_OUTPUT_TOKENS=300")
 				.run(context -> {
 					assertThat(context).hasNotFailed();
-					assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v1");
+					assertThat(context.getBean(AiProperties.class).promptVersion()).isEqualTo("incident-analysis-v2");
 					assertThat(context.getBean(AiProperties.class).maxOutputTokens()).isEqualTo(300);
 				});
 	}
@@ -105,9 +105,10 @@ class AiConfigurationTests {
 		});
 	}
 
-	@Test
-	void rejectsUnknownPromptVersionAtStartup() {
-		contextRunner.withPropertyValues("AI_PROMPT_VERSION=incident-analysis-v999").run(context ->
+	@ParameterizedTest
+	@ValueSource(strings = {"incident-analysis-v999", "incident-analysis-v1"})
+	void rejectsUnknownOrIncompatiblePromptVersionAtStartup(String version) {
+		contextRunner.withPropertyValues("AI_PROMPT_VERSION=" + version).run(context ->
 				assertThat(context).hasFailed().getFailure().hasRootCauseInstanceOf(IllegalArgumentException.class));
 	}
 

@@ -1,6 +1,7 @@
 package dev.alexey.devassist.analysis.infrastructure;
 
 import java.time.Clock;
+import dev.alexey.devassist.analysis.validation.IncidentAnalysisValidator;
 
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -16,6 +17,16 @@ import org.springframework.context.annotation.Configuration;
 public class AiConfiguration {
 
 	@Bean
+	IncidentAnalysisSchema incidentAnalysisSchema() {
+		return new IncidentAnalysisSchema();
+	}
+
+	@Bean
+	IncidentAnalysisConverter incidentAnalysisConverter() {
+		return new IncidentAnalysisConverter(new IncidentAnalysisValidator());
+	}
+
+	@Bean
 	IncidentAnalysisPrompt incidentAnalysisPrompt(AiProperties properties) {
 		return new IncidentAnalysisPrompt(properties.promptVersion());
 	}
@@ -23,8 +34,9 @@ public class AiConfiguration {
 	@Bean
 	@ConditionalOnProperty(name = "app.ai.provider", havingValue = "openai", matchIfMissing = true)
 	IncidentAnalysisGateway incidentAnalysisGateway(OpenAiChatModel chatModel, AiProperties properties,
-			IncidentAnalysisPrompt prompt, Environment environment) {
+			IncidentAnalysisPrompt prompt, Environment environment,
+			IncidentAnalysisConverter converter, IncidentAnalysisSchema schema) {
 		Assert.hasText(environment.getProperty("spring.ai.openai.api-key"), "OPENAI_API_KEY is required when app.ai.provider=openai");
-		return new OpenAiIncidentAnalysisGateway(chatModel, properties, prompt, Clock.systemUTC(), System::nanoTime);
+		return new OpenAiIncidentAnalysisGateway(chatModel, properties, prompt, Clock.systemUTC(), System::nanoTime, converter, schema);
 	}
 }

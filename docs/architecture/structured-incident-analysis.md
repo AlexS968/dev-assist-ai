@@ -1,10 +1,13 @@
-# Phase 3, step 1: structured incident analysis contract
+# Phase 3: structured incident analysis contract
 
-This step adds an independent candidate model and explicit Java validation boundary.
-The gateway, provider implementations, v1 prompts, result metadata, mapper and public
-REST response still use plain text. No JSON parsing, schema generation, retry,
-repair or provider call is introduced. ADR-003 remains **Proposed**: providers do
-not yet return schema-validated structured output.
+Both adapters now request native structured output using one canonical resource,
+`schemas/incident-analysis-v2.json`. The gateway result and REST response carry
+`analysis` plus unchanged provider/model/promptVersion/timing/nullable token metadata.
+The old plain-text `content` field is removed. Controller still delegates only to
+service; service uses MapStruct to map to separate REST DTO records with Swagger
+annotations. Core records remain independent of Jackson and Swagger.
+ADR-003 remains **Proposed** until live structured smoke tests for both providers.
+No live calls were made for this migration.
 
 ## Contract
 
@@ -50,9 +53,9 @@ record is therefore an immutable candidate, not proof of validity. Strings are n
 trimmed, normalized or truncated. Blank uses Java `String.isBlank()` and length
 uses Java `String.length()` (UTF-16 code units).
 
-## Example future JSON payload
+## JSON analysis payload
 
-This is the proposed analysis body, not the current REST response or a parser implementation.
+This object is nested under `analysis` in the REST response. See README for the complete envelope.
 
 ```json
 {
@@ -76,16 +79,50 @@ This is the proposed analysis body, not the current REST response or a parser im
 }
 ```
 
-## Before migrating OpenAI and Ollama
+## Native enforcement and conversion
 
-- Introduce a new prompt version and provider-specific structured-output configuration;
-  verify both adapters against the same contract with mocked responses.
-- Validate every converted candidate before returning it. Keep parse/conversion errors
-  sanitized as well; never attach raw output or framework violations containing values.
-- Decide JSON handling for missing/null/non-integer `order`, unknown enum values and
-  unknown fields. Java `int` only represents integers; a parser must reject coercion.
-- Confirm schema constraints and output-budget behavior separately for each provider.
-  The current 450-token budget may truncate structured output; no budget changes
-  or live experiments are part of this step.
-- Plan gateway/result/REST migration and compatibility separately. No automatic
-  retry, repair or fallback is implied by this contract.
+OpenAI uses Spring AI 2.0.1 `OpenAiChatModel.ResponseFormat` with `JSON_SCHEMA`,
+the canonical schema string and `strict=true`. Spring AI converts this to the
+official client's Chat Completions `response_format.json_schema` request.
+Ollama uses `OllamaApi.ChatRequest.format` with the same schema as a JSON object;
+`think=false`, `num_predict`, transport timeouts and no-retry behavior are preserved.
+The schema requires all fields, describes types and enum values, and sets
+`additionalProperties=false` on every object. To keep the provider schema small
+and portable, sizes, nonblank strings and consecutive orders are enforced by the
+application validator (and explained in v2 prompts), not by schema keywords.
+
+`IncidentAnalysisConverter` owns a dedicated Jackson 3 ObjectReader; the REST mapper
+is untouched. It rejects malformed JSON, comments/fences, trailing tokens, duplicate
+keys, unknown properties, invalid enum values, missing/null creator fields and scalar
+coercion (including string/fractional order values and numeric enum ordinals).
+No regex extraction or cleanup is attempted. Every parsed candidate, including a
+JSON null root, goes through `IncidentAnalysisValidator` before a result is returned.
+Parsing errors become `IncidentAnalysisConversionException` without the Jackson
+cause or raw content. Semantic failures remain `IncidentAnalysisValidationException`.
+Both extend `IncidentAnalysisException` and return the existing fixed 502 ProblemDetail;
+transport timeouts remain 504 and unknown incident IDs remain 404. No new logging
+of responses, incident data or prompts is introduced. Empty output retains its
+existing safe empty-response exception and 502 mapping.
+
+Only `incident-analysis-v2` is accepted at startup; v1 resources are preserved but
+incompatible with this runtime. System/user roles remain separate. Incident data
+appears only in the user message. The prompt requests concise findings, not internal
+reasoning traces. The default output budget rises from 450 to 1000 tokens, reducing
+truncation risk at potentially higher cost/latency; overrides remain supported.
+The maximum contract size can still exceed that budget. No retry, repair or fallback
+is implemented.
+
+## Before live smoke tests
+
+Offline tests verify native request options, strict conversion, validation, REST
+mapping and safe errors, not model quality or actual provider enforcement. Test v2
+with each configured model and provider version, including output limits, refusal,
+truncation and useful uncertainties. A configured model override must support native
+schema output; provider rejection remains a safe failure, never prompt-only fallback.
+No schema can prove an incident's root cause or calibrate model likelihood.
+
+Sources checked against local Spring AI 2.0.1 source jars:
+[OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
+[GPT-6 Luna capabilities](https://developers.openai.com/api/docs/models/gpt-6-luna),
+[Spring AI OpenAI](https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html),
+[Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).

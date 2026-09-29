@@ -16,8 +16,8 @@ public final class IncidentAnalysisPrompt {
 
 	public IncidentAnalysisPrompt(String version) {
 		String directory = switch (version) {
-			case "incident-analysis-v1" -> "prompts/incident-analysis/v1/";
-			default -> throw new IllegalArgumentException("Unsupported incident analysis prompt version: " + version);
+			case "incident-analysis-v2" -> "prompts/incident-analysis/v2/";
+			default -> throw new IllegalArgumentException("Unsupported or incompatible incident analysis prompt version: " + version);
 		};
 		this.version = version;
 		this.system = read(directory + "system.st");

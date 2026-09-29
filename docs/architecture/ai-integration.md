@@ -1,7 +1,7 @@
-# Phase 2: incident analysis
+# Phase 3: structured incident analysis
 
 `POST /api/v1/incidents/{id}/analysis` generates a synchronous analysis for an
-existing incident. The request has no body. It returns 200 with content, provider,
+existing incident. The request has no body. It returns 200 with structured analysis, provider,
 model, promptVersion, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
 An unknown UUID returns the existing 404 ProblemDetail; provider failures and
 null/empty/blank content return a sanitized 502 ProblemDetail. Transport timeouts
@@ -13,12 +13,13 @@ return 504 with a fixed safe message. No analysis is saved.
   delegates to services; it has no mapper, repository or gateway dependency.
 - `IncidentAnalysisService` loads the incident, creates an immutable title/description
   snapshot, invokes `IncidentAnalysisGateway`, and maps the result to the response DTO.
-- `IncidentMapper` maps both existing incident responses and analysis results.
+- `IncidentMapper` maps both existing incident responses and analysis results, including
+  dedicated StructuredIncidentAnalysisDTO, ProbableCauseDTO and InvestigationStepDTO records.
   Existing incident response mapping now takes place in `IncidentService`.
 - `IncidentAnalysisInput` and `IncidentAnalysisResult` are application value objects;
-  the latter carries plain text and metadata, with no framework/provider types.
+  the latter carries validated StructuredIncidentAnalysis and metadata, with no framework/provider types.
 - `OpenAiIncidentAnalysisGateway` isolates Spring AI, builds separate system/user
-  messages, and reads content, actual model and usage from ChatResponse. If no model
+  messages, and reads JSON, actual model and usage from ChatResponse. If no model
   is reported, the configured model is returned. EmptyUsage becomes null counts;
   reported zero counts remain zero. Missing totals are not calculated by the adapter.
 - `IncidentAnalysisException` wraps provider failures. Its distinct subtype
@@ -153,18 +154,18 @@ Quality observation: the response was useful and structured in presentation, but
 some hypotheses were more general and speculative than in the observed OpenAI
 response. This is a single observation, not a benchmark or a general provider
 ranking. Comparative evaluation will be a separate phase. Structured presentation
-does not establish schema-validated structured output, which is still absent.
+does not establish schema-validated structured output, which was absent at that stage.
 
 ## Versioned prompt contract
 
-`incident-analysis-v1` maps explicitly to these UTF-8 classpath resources:
+`incident-analysis-v2` maps explicitly to these UTF-8 classpath resources:
 
-- `prompts/incident-analysis/v1/system.st`
-- `prompts/incident-analysis/v1/user.st`
+- `prompts/incident-analysis/v2/system.st`
+- `prompts/incident-analysis/v2/user.st`
 
 The system message asks for at most three likely causes and four concrete
-investigation steps, uncertainty and evidence, with short bullets and no unsupported
-root-cause claim. Incident content is untrusted data and cannot be interpolated into
+investigation steps, uncertainty and evidence, with JSON-only output and no unsupported
+root-cause claim. Explanations and rationales are concise findings, not internal reasoning traces. Incident content is untrusted data and cannot be interpolated into
 system instructions. The user template binds only title and description; values are
 not recursively rendered as templates. Role separation reduces instruction confusion
 but does not guarantee that a model will resist every prompt injection.
@@ -175,9 +176,12 @@ new directory and explicitly register a new identifier, rather than rewriting v1
 
 | Application property | Environment variable | Default | Validation |
 |---|---|---|---|
-| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v1` | Nonblank, registered version |
-| `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `450` | Integer, 1–16384 |
+| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v2` | Nonblank, compatible version |
+| `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `1000` | Integer, 1–16384 |
 
+The 1000-token default allows room for JSON and reduces truncation risk compared with
+450 tokens, at potentially higher output cost and latency. It does not guarantee
+completion at the maximum contract sizes. Configuration overrides remain available.
 The upper bound is an application guardrail; provider/model capabilities can be
 more restrictive. OpenAI-specific `maxCompletionTokens` is applied to each request
 inside the infrastructure adapter. The adapter calls ChatModel directly with a
@@ -243,19 +247,39 @@ ChatResponseMetadata (`Objects.requireNonNullElse`), so ordinary construction ca
 produce a null getter result. The missing-metadata test exercises this constructor
 path without reflection; a separate test covers null generation output.
 
-There is no analysis persistence, structured output, retry/fallback policy, RAG,
+There is no analysis persistence, retry/repair/fallback policy, RAG,
 tool calling. This endpoint is synchronous and has no new
 rate limiting or authentication. Repeated requests generate fresh analyses.
 Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
 (see ADR-003). The second used incident-analysis-v1, took 5816 ms and produced
 383 output tokens within the 450-token budget; the response was complete.
 No repeat live request was made for timeout implementation. Timeout wiring and
-error translation are tested offline; structured-output conversion remains
-outstanding, so ADR-003 remains Proposed.
+error translation and structured-output conversion are tested offline; live v2
+structured smoke tests remain outstanding, so ADR-003 remains Proposed.
 
-## Phase 3 foundation
+## Native structured output and validation
 
-The independent [structured analysis contract](structured-incident-analysis.md)
-now defines immutable candidate records and full-graph validation. It is not wired
-into either adapter or the REST endpoint yet; provider structured-output conversion
-remains outstanding and ADR-003 remains Proposed.
+The [structured contract](structured-incident-analysis.md) is now wired into both
+adapters and the REST response. The canonical `schemas/incident-analysis-v2.json`
+requires every property, restricts likelihood to LOW/MEDIUM/HIGH, and forbids unknown
+properties on each object. It intentionally leaves business limits to the application.
+OpenAI receives `ResponseFormat.JSON_SCHEMA` with that schema and `strict=true`;
+Ollama receives the same schema object in `ChatRequest.format`.
+This uses official native mechanisms, not prompt-only JSON instructions.
+
+The dedicated Jackson 3 `IncidentAnalysisConverter` rejects malformed JSON, trailing
+content, unknown fields, invalid enums, missing/null required fields, duplicate keys
+and scalar coercion. It then invokes the complete application validator, including
+unique consecutive 1..N order checks, before returning a structured result.
+Conversion failures retain no Jackson cause, prompt or response; semantic validation
+failures retain only safe paths/messages. Both map to the fixed existing 502 response.
+Empty output, provider failures and 504 transport timeout behavior are preserved.
+No retry, repair, regex fallback or additional provider request is introduced.
+
+Runtime startup accepts only v2; immutable v1 resources remain for historical evidence.
+System and user messages stay separate; only user messages contain incident data.
+The REST `content` field is removed atomically in favor of `analysis`; metadata and
+nullable usage semantics are unchanged. Swagger types are confined to REST DTOs.
+Tests cover schema request equality, nested DTO schemas, strict conversion, validation
+before return and safe ProblemDetail mapping. Live model quality, refusal behavior,
+provider-version compatibility and budget adequacy still require smoke tests.

@@ -66,13 +66,15 @@ class OpenApiTests {
 		jsonPath(operations[4] + ".responses['200'].content['application/json'].schema['$ref']")
 				.value("#/components/schemas/IncidentAnalysisResponseDTO").match(result);
 		jsonPath(operations[4] + ".requestBody").doesNotExist().match(result);
-		for (String field : new String[]{"content", "provider", "model", "promptVersion", "generatedAt", "latencyMs",
+		for (String field : new String[]{"provider", "model", "promptVersion", "generatedAt", "latencyMs",
 				"inputTokens", "outputTokens", "totalTokens"}) {
 			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".description")
 					.isNotEmpty().match(result);
 			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".example")
 					.exists().match(result);
 		}
+
+		assertStructuredSchemas(result);
 
 		for (String schema : new String[]{"CreateIncidentRequestDTO", "IncidentResponseDTO",
 				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO", "IncidentAnalysisResponseDTO"}) {
@@ -90,4 +92,31 @@ class OpenApiTests {
 					.value(containsInAnyOrder("NEW", "IN_PROGRESS", "RESOLVED")).match(result);
 		}
 	}
+	private void assertStructuredSchemas(MvcResult result) throws Exception {
+		String schemas = "$.components.schemas.";
+		jsonPath(schemas + "IncidentAnalysisResponseDTO.properties.content").doesNotExist().match(result);
+		jsonPath(schemas + "IncidentAnalysisResponseDTO.properties.analysis['$ref']")
+				.value("#/components/schemas/StructuredIncidentAnalysisDTO").match(result);
+		jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties.probableCauses.items['$ref']")
+				.value("#/components/schemas/ProbableCauseDTO").match(result);
+		jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties.investigationSteps.items['$ref']")
+				.value("#/components/schemas/InvestigationStepDTO").match(result);
+		jsonPath(schemas + "ProbableCauseDTO.properties.likelihood.enum")
+				.value(containsInAnyOrder("LOW", "MEDIUM", "HIGH")).match(result);
+		jsonPath(schemas + "ProbableCauseDTO.properties.likelihood.description")
+				.value("Qualitative prioritization by the model, not probability or measured confidence").match(result);
+		for (String field : new String[]{"summary", "probableCauses", "investigationSteps", "uncertainties"}) {
+			jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties." + field + ".description").isNotEmpty().match(result);
+		}
+		for (String field : new String[]{"title", "explanation", "likelihood", "evidenceToCheck"}) {
+			jsonPath(schemas + "ProbableCauseDTO.properties." + field + ".description").isNotEmpty().match(result);
+		}
+		for (String field : new String[]{"order", "action", "rationale"}) {
+			jsonPath(schemas + "InvestigationStepDTO.properties." + field + ".description").isNotEmpty().match(result);
+		}
+		jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties.summary.maxLength").value(500).match(result);
+		jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties.probableCauses.maxItems").value(3).match(result);
+		jsonPath(schemas + "StructuredIncidentAnalysisDTO.properties.investigationSteps.maxItems").value(4).match(result);
+	}
+
 }

@@ -16,6 +16,7 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiChatModel.ResponseFormat;
 import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -29,15 +30,20 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 	private final IncidentAnalysisPrompt prompt;
 	private final Clock clock;
 	private final LongSupplier nanoTime;
+	private final IncidentAnalysisConverter converter;
+	private final IncidentAnalysisSchema schema;
 
 	public OpenAiIncidentAnalysisGateway(ChatModel chatModel, AiProperties properties,
-			IncidentAnalysisPrompt prompt, Clock clock, LongSupplier nanoTime) {
+			IncidentAnalysisPrompt prompt, Clock clock, LongSupplier nanoTime,
+			IncidentAnalysisConverter converter, IncidentAnalysisSchema schema) {
 		this.chatModel = chatModel;
 		this.configuredModel = properties.openAiModel();
 		this.maxOutputTokens = properties.maxOutputTokens();
 		this.prompt = prompt;
 		this.clock = clock;
 		this.nanoTime = nanoTime;
+		this.converter = converter;
+		this.schema = schema;
 	}
 
 	@Override
@@ -46,7 +52,9 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 		ChatResponse response;
 		try {
 			var request = new Prompt(List.of(new SystemMessage(prompt.system()), new UserMessage(prompt.user(incident))),
-					OpenAiChatOptions.builder().model(configuredModel).maxCompletionTokens(maxOutputTokens).build());
+					OpenAiChatOptions.builder().model(configuredModel).maxCompletionTokens(maxOutputTokens)
+						.responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_SCHEMA)
+								.jsonSchema(schema.json()).strict(true).build()).build());
 			response = chatModel.call(request);
 		}
 		catch (RuntimeException exception) {
@@ -72,7 +80,7 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 		var usage = metadata.getUsage();
 		boolean hasUsage = !(usage instanceof EmptyUsage);
 		String model = metadata.getModel();
-		return new IncidentAnalysisResult(content, "openai",
+		return new IncidentAnalysisResult(converter.convert(content), "openai",
 				model.isBlank() ? configuredModel : model,
 				prompt.version(), clock.instant(), latencyMs,
 				hasUsage ? usage.getPromptTokens() : null,

@@ -3,6 +3,10 @@ package dev.alexey.devassist.incident.controller;
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.analysis.infrastructure.IncidentAnalysisConverter;
+import dev.alexey.devassist.analysis.validation.IncidentAnalysisValidator;
+import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.JSON;
+import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.analysis;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
@@ -420,16 +424,25 @@ class IncidentControllerTests {
 		when(gateway.analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed")))
 				.thenAnswer(invocation -> {
 					assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-					return new IncidentAnalysisResult("Check connectivity", "fake", "test-model", "incident-analysis-v1", generatedAt,
+					return new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2", generatedAt,
 							125, 12, 8, 20);
 				});
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-				.andExpect(jsonPath("$.content").value("Check connectivity"))
+				.andExpect(jsonPath("$.content").doesNotExist())
+				.andExpect(jsonPath("$.analysis.summary").value("Database timeouts"))
+				.andExpect(jsonPath("$.analysis.probableCauses[0].title").value("Connection exhaustion"))
+				.andExpect(jsonPath("$.analysis.probableCauses[0].explanation").value("Connections may be held too long"))
+				.andExpect(jsonPath("$.analysis.probableCauses[0].likelihood").value("MEDIUM"))
+				.andExpect(jsonPath("$.analysis.probableCauses[0].evidenceToCheck[0]").value("Check active connections"))
+				.andExpect(jsonPath("$.analysis.investigationSteps[0].order").value(1))
+				.andExpect(jsonPath("$.analysis.investigationSteps[0].action").value("Inspect metrics"))
+				.andExpect(jsonPath("$.analysis.investigationSteps[0].rationale").value("Test the hypothesis"))
+				.andExpect(jsonPath("$.analysis.uncertainties[0]").value("Metrics are unavailable"))
 				.andExpect(jsonPath("$.provider").value("fake"))
 				.andExpect(jsonPath("$.model").value("test-model"))
-				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v1"))
+				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v2"))
 				.andExpect(jsonPath("$.generatedAt").value(generatedAt.toString()))
 				.andExpect(jsonPath("$.latencyMs").value(125))
 				.andExpect(jsonPath("$.inputTokens").value(12))
@@ -444,7 +457,7 @@ class IncidentControllerTests {
 	@Test
 	void analysisPreservesMissingUsageAsJsonNull() throws Exception {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
-		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult("Analysis", "fake", "model", "incident-analysis-v1",
+		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
 				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null));
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
@@ -497,7 +510,7 @@ class IncidentControllerTests {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
 		when(gateway.analyze(any())).thenAnswer(invocation -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-			return new IncidentAnalysisResult("Analysis", "fake", "model", "incident-analysis-v1", Instant.EPOCH, 1, null, null, null);
+			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2", Instant.EPOCH, 1, null, null, null);
 		});
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
@@ -523,4 +536,19 @@ class IncidentControllerTests {
 		assertThat(result.getResponse().getContentAsString()).doesNotContain(
 				"fake-api-key", "full prompt", "private incident description", "provider.invalid", "IllegalStateException", "stackTrace");
 	}
+	@ParameterizedTest
+	@ValueSource(strings = {"malformed", "semantic"})
+	void structuredConversionFailuresReturnSanitized502(String scenario) throws Exception {
+		var incident = repository.save(new Incident("Title", "PRIVATE incident description", IncidentSource.API));
+		String raw = scenario.equals("malformed") ? "PRIVATE raw model response" : JSON.replace("Database timeouts", "PRIVATE".repeat(100));
+		var converter = new IncidentAnalysisConverter(new IncidentAnalysisValidator());
+		when(gateway.analyze(any())).thenAnswer(invocation -> converter.convert(raw));
+		var result = mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isBadGateway())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."))
+				.andReturn();
+		assertThat(result.getResponse().getContentAsString()).doesNotContain("PRIVATE", "raw model response", "summary", "violations");
+	}
+
 }
