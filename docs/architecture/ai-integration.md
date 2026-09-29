@@ -254,8 +254,8 @@ Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
 (see ADR-003). The second used incident-analysis-v1, took 5816 ms and produced
 383 output tokens within the 450-token budget; the response was complete.
 No repeat live request was made for timeout implementation. Timeout wiring and
-error translation and structured-output conversion are tested offline; live v2
-structured smoke tests remain outstanding, so ADR-003 remains Proposed.
+error translation and structured-output conversion are tested offline. The reported
+live v2 tests below complete the integration acceptance evidence; ADR-003 is Accepted.
 
 ## Native structured output and validation
 
@@ -281,5 +281,44 @@ System and user messages stay separate; only user messages contain incident data
 The REST `content` field is removed atomically in favor of `analysis`; metadata and
 nullable usage semantics are unchanged. Swagger types are confined to REST DTOs.
 Tests cover schema request equality, nested DTO schemas, strict conversion, validation
-before return and safe ProblemDetail mapping. Live model quality, refusal behavior,
-provider-version compatibility and budget adequacy still require smoke tests.
+before return and safe ProblemDetail mapping. The two live tests below validate the
+observed integration paths. Broader model-quality evaluation, refusal behavior,
+provider-version compatibility and budget adequacy across incidents remain future work.
+
+## Live structured-output smoke tests
+
+The project owner reported the following two real smoke tests using
+`incident-analysis-v2`. These are supplied observations; no additional live model
+calls were made to document them. Test dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| Schema conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000 | 1000 |
+| latencyMs | Not supplied | 25458 |
+| inputTokens | Not supplied | 310 |
+| outputTokens | Not supplied | 662 |
+| totalTokens | Not supplied | null |
+
+The Ollama response contained 3 probable causes, 4 consecutively numbered
+investigation steps and uncertainties. Its output token limit of 1000 was not
+reached. The null total is preserved, not calculated from input/output counts.
+No OpenAI latency or token usage is inferred, and no timeout override is inferred
+for either structured test. No full prompt, incident title/description, full model
+response, API key or other credentials are retained in this evidence.
+
+### Qualitative observation and evaluation follow-up
+
+These are individual smoke tests, not a benchmark or a full evaluation. Ollama
+produced a usable structured response, but assigned HIGH to a connection-pool
+misconfiguration hypothesis without sufficient evidence. Its recommendation to
+increase pool size requires checking PostgreSQL capacity first; otherwise it may
+increase contention. These reported observations are input to a future evaluation
+phase, not a structured-output runtime defect. Schema conversion and semantic
+validation establish contract compliance, not factual correctness or calibrated
+likelihood.

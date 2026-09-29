@@ -43,9 +43,9 @@ a provider-neutral gateway. Analysis results are returned without persistence.
 - Testcontainers
 - GitHub Actions
 
-Spring AI 2.0.1 is managed through its official BOM. ADR-003 remains Proposed
-pending live structured-output validation. Transport timeout handling is tested offline. Live application smoke tests on
-2026-09-27 succeeded with gpt-6-luna and local qwen3:14b; see
+Spring AI 2.0.1 is managed through its official BOM. ADR-003 is **Accepted** after
+reported live structured-output smoke tests succeeded with gpt-6-luna and local
+qwen3:14b using incident-analysis-v2. Transport timeout handling is tested offline; see
 [ADR-003](docs/adr/ADR-003-ai-framework.md) for the recorded evidence.
 
 ## Architecture
@@ -290,6 +290,30 @@ unreported total, are returned as null.
 
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
 
+## Structured-output smoke-test results
+
+The project owner reported HTTP 200 for both `openai` / `gpt-6-luna` and
+`ollama` / `qwen3:14b`, using `incident-analysis-v2` and an output budget of 1000.
+Both structured JSON responses passed schema conversion and semantic validation.
+OpenAI latency and token usage were not supplied and are not inferred.
+
+Ollama reported `latencyMs=25458`, `inputTokens=310`, `outputTokens=662` and
+`totalTokens=null`. Its response contained 3 probable causes, 4 consecutively
+numbered investigation steps and uncertainties; the 1000-token limit was not reached.
+
+These individual smoke tests are not a benchmark or full evaluation. Ollama's
+structured response was usable, but assigned HIGH to a connection-pool
+misconfiguration hypothesis without sufficient evidence. Increasing pool size
+requires checking PostgreSQL capacity first to avoid worsening contention.
+These observations inform future evaluation, rather than indicating a
+structured-output runtime defect. No retry, repair, fallback or analysis-result
+persistence is implied by acceptance.
+
+See [detailed evidence](docs/architecture/ai-integration.md#live-structured-output-smoke-tests)
+and [ADR-003 acceptance](docs/adr/ADR-003-ai-framework.md#acceptance-outcome).
+No additional live calls were made for this documentation update; no full prompts,
+incident title/description, model responses or credentials are recorded.
+
 ## Roadmap
 
 1. Engineering foundation
@@ -318,7 +342,7 @@ prioritization, not probability or measured confidence. No `rootCause` is assert
 See the [structured contract](docs/architecture/structured-incident-analysis.md).
 
 - analysis is synchronous and results are not persisted;
-- historical v1 smoke tests do not validate v2 structured output; ADR-003 remains Proposed until live structured smoke tests;
+- the two successful v2 smoke tests establish integration evidence, not a benchmark or full evaluation;
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
