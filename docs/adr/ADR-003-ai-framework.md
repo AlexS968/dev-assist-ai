@@ -250,11 +250,21 @@ Status is **Accepted**. The following criteria are fulfilled:
 - successful live structured-output smoke tests for both providers, reported above.
 
 Acceptance concerns the framework and integration boundaries. It does not establish
-production reliability or model-quality equivalence. Retries, repair, fallback,
-analysis-result persistence and full evaluation are not implemented and remain
-known limitations or future work. Existing incident persistence is separate.
+production reliability or model-quality equivalence. General retries, provider
+fallback, analysis-result persistence and full evaluation remain unimplemented.
+The bounded repair addition below does not change these acceptance claims. Existing incident persistence is separate.
 Live timeout expiry has not been measured; the recorded timeout evidence remains
 transport configuration and offline exception/504 tests.
+
+## Addendum: controlled repair
+
+Status remains **Accepted**. A provider-neutral policy outside both adapters now
+permits one repair after initial conversion/validation failure, with a hard maximum
+of two calls and no provider fallback or SDK retry. Safe token telemetry survives
+invalid attempts; successful repair reports aggregate usage, orchestration latency
+and attemptCount=2. A fixed shared instruction reuses v2 and the canonical schema
+without exposing invalid output or diagnostics. Existing smoke tests do not validate
+live repair; cost, latency and factual-quality evaluation remain future work.
 
 ## Revisit when
 

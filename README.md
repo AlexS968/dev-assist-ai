@@ -160,6 +160,7 @@ Only the stored title and description are sent to the AI gateway. A successful
   "promptVersion": "incident-analysis-v2",
   "generatedAt": "2026-09-27T12:00:00Z",
   "latencyMs": 1250,
+  "attemptCount": 1,
   "inputTokens": 120,
   "outputTokens": 80,
   "totalTokens": 200
@@ -167,7 +168,7 @@ Only the stored title and description are sent to the AI gateway. A successful
 ```
 
 Unavailable token counts are `null`. `generatedAt` is application receipt time;
-latency uses a monotonic timer. The result is not saved and each POST generates
+latency uses a monotonic timer; after repair it covers both attempts. The result is not saved and each POST generates
 a new analysis. Provider calls run outside DB transactions.
 
 Unknown incidents return the existing 404 `application/problem+json` response.
@@ -306,8 +307,8 @@ structured response was usable, but assigned HIGH to a connection-pool
 misconfiguration hypothesis without sufficient evidence. Increasing pool size
 requires checking PostgreSQL capacity first to avoid worsening contention.
 These observations inform future evaluation, rather than indicating a
-structured-output runtime defect. No retry, repair, fallback or analysis-result
-persistence is implied by acceptance.
+structured-output runtime defect. These smoke tests predate the controlled repair
+policy and do not establish live repair behavior.
 
 See [detailed evidence](docs/architecture/ai-integration.md#live-structured-output-smoke-tests)
 and [ADR-003 acceptance](docs/adr/ADR-003-ai-framework.md#acceptance-outcome).
@@ -330,13 +331,33 @@ incident title/description, model responses or credentials are recorded.
 
 AI capabilities are added only when they solve a concrete product problem.
 
+## Controlled repair
+
+A provider-neutral policy between service and gateway allows **at most two total
+attempts**, always enabled. Only conversion or semantic validation failure triggers
+one repair. Success, empty response, timeout, provider/transport errors and unknown
+incidents do not. A second failure is final; existing safe 502/504 mappings remain.
+There are no loops, background calls, sleep, SDK retries or provider fallback.
+
+The second call uses the original incident data and same canonical native schema,
+with a fixed shared repair instruction. No invalid model response or error diagnostics
+are sent back to the provider. The prompt version remains `incident-analysis-v2`.
+
+`attemptCount` is 1 or 2. First-success metrics are unchanged; repaired-success
+latency covers the whole orchestration. Each token field sums both attempts only if
+both values are available, otherwise it is null. Results and metrics are not persisted.
+Repair may roughly double cost/latency; timeout and token budgets remain per attempt.
+It improves contract reliability, not factual accuracy. See
+[repair details](docs/architecture/ai-integration.md#controlled-structured-output-repair).
+
 ## Known limitations
 
 The current AI step provides synchronous, schema-constrained structured analysis.
 OpenAI uses native strict JSON Schema; Ollama uses the same schema via `format`.
 A dedicated Jackson reader rejects malformed/trailing JSON, unknown properties,
 missing/null required fields and coercion; application validation then checks the
-complete graph and step ordering. There is no retry, repair or fallback.
+complete graph and step ordering. One controlled repair is allowed only for initial
+conversion/validation failures; SDK retries and provider fallback remain disabled.
 The old `content` response field is removed. `likelihood` is qualitative model
 prioritization, not probability or measured confidence. No `rootCause` is asserted.
 See the [structured contract](docs/architecture/structured-incident-analysis.md).

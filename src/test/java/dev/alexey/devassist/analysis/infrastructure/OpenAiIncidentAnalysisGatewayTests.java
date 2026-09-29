@@ -58,13 +58,16 @@ class OpenAiIncidentAnalysisGatewayTests {
 		verify(model, never()).call(any(Prompt.class));
 	}
 
-	@Test
-	void mapsContentMetadataAndMeasuredTime() {
+	@ParameterizedTest
+	@ValueSource(booleans = {false, true})
+	void mapsContentMetadataAndMeasuredTime(boolean repair) {
+		var requestInput = new IncidentAnalysisInput(input.title(), input.description(), repair);
 		when(model.call(any(Prompt.class))).thenReturn(response(JSON,
 				ChatResponseMetadata.builder().model("reported-model").usage(new DefaultUsage(120, 80, 200)).build()));
 
-		var result = gateway().analyze(input);
+		var result = gateway().analyze(requestInput);
 
+		assertThat(result.attemptCount()).isEqualTo(1);
 		assertThat(result.analysis()).isEqualTo(analysis());
 		assertThat(result.provider()).isEqualTo("openai");
 		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v2");
@@ -86,7 +89,7 @@ class OpenAiIncidentAnalysisGatewayTests {
 		assertThat(options.getMaxTokens()).isNull();
 		assertThat(options.getTemperature()).isNull();
 		assertThat(prompt.getValue().getInstructions().getFirst().getText())
-				.isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v2").system())
+				.isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v2").system(requestInput))
 				.doesNotContain(input.title(), input.description());
 		assertThat(prompt.getValue().getInstructions().getFirst().getMessageType()).isEqualTo(MessageType.SYSTEM);
 		assertThat(prompt.getValue().getInstructions().getLast().getMessageType()).isEqualTo(MessageType.USER);
@@ -221,6 +224,25 @@ class OpenAiIncidentAnalysisGatewayTests {
 		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisValidationException.class)
 				.hasNoCause();
 		verify(model).call(any(Prompt.class));
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = {false, true})
+	void retainsSafeUsageForInvalidAttempt(boolean semantic) {
+		String json = semantic ? JSON.replace("Database timeouts", " ") : "PRIVATE raw response";
+		when(model.call(any(Prompt.class))).thenReturn(response(json,
+				ChatResponseMetadata.builder().usage(new DefaultUsage(12, 8, 20)).build()));
+		var gateway = gateway();
+		var failure = catchThrowable(() -> gateway.analyze(input));
+		dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage usage;
+		if (semantic) {
+			usage = ((IncidentAnalysisValidationException) failure).usage();
+		}
+		else {
+			usage = ((IncidentAnalysisConversionException) failure).usage();
+		}
+		assertThat(usage).isEqualTo(new dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage(12, 8, 20));
+		assertThat(failure).hasNoCause().hasMessageNotContaining("PRIVATE");
 	}
 
 }

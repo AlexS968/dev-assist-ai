@@ -22,5 +22,7 @@ public record IncidentAnalysisResponseDTO(
 		@Schema(description = "Output tokens reported by the provider; null when unavailable", example = "80", nullable = true)
 		Integer outputTokens,
 		@Schema(description = "Total tokens reported by the provider; null when unavailable", example = "200", nullable = true)
-		Integer totalTokens) {
+		Integer totalTokens,
+		@Schema(description = "Number of attempts: 1 for initial success, 2 after one repair", example = "1", minimum = "1", maximum = "2")
+		int attemptCount) {
 }

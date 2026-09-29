@@ -52,10 +52,13 @@ class OllamaIncidentAnalysisGatewayTests {
 		verifyNoInteractions(api);
 	}
 
-	@Test
-	void mapsMetadataAndSendsSeparatedPromptWithLimitAndThinkingDisabled() {
+	@ParameterizedTest
+	@ValueSource(booleans = {false, true})
+	void mapsMetadataAndSendsSeparatedPromptWithLimitAndThinkingDisabled(boolean repair) {
+		var requestInput = new IncidentAnalysisInput(input.title(), input.description(), repair);
 		when(api.chat(any())).thenReturn(response("reported-model", JSON, 12, 8));
-		var result = gateway().analyze(input);
+		var result = gateway().analyze(requestInput);
+		assertThat(result.attemptCount()).isEqualTo(1);
 		assertThat(result.analysis()).isEqualTo(analysis());
 		assertThat(result.provider()).isEqualTo("ollama");
 		assertThat(result.model()).isEqualTo("reported-model");
@@ -73,7 +76,7 @@ class OllamaIncidentAnalysisGatewayTests {
 		assertThat(sent.format()).isEqualTo(new IncidentAnalysisSchema().asMap());
 		assertThat(sent.messages()).hasSize(2);
 		assertThat(sent.messages().getFirst().role()).isEqualTo(OllamaApi.Message.Role.SYSTEM);
-		assertThat(sent.messages().getFirst().content()).isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v2").system())
+		assertThat(sent.messages().getFirst().content()).isEqualTo(new IncidentAnalysisPrompt("incident-analysis-v2").system(requestInput))
 				.doesNotContain(input.title(), input.description());
 		assertThat(sent.messages().getLast().role()).isEqualTo(OllamaApi.Message.Role.USER);
 		assertThat(sent.messages().getLast().content()).isEqualTo("Title: " + input.title() + "\nDescription: " + input.description());
@@ -154,6 +157,24 @@ class OllamaIncidentAnalysisGatewayTests {
 		assertThatThrownBy(() -> gateway.analyze(input)).isExactlyInstanceOf(IncidentAnalysisValidationException.class)
 				.hasNoCause();
 		verify(api).chat(any());
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = {false, true})
+	void retainsSafeUsageForInvalidAttempt(boolean semantic) {
+		String json = semantic ? JSON.replace("Database timeouts", " ") : "PRIVATE raw response";
+		when(api.chat(any())).thenReturn(response("model", json, 12, 8));
+		var gateway = gateway();
+		var failure = catchThrowable(() -> gateway.analyze(input));
+		dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage usage;
+		if (semantic) {
+			usage = ((IncidentAnalysisValidationException) failure).usage();
+		}
+		else {
+			usage = ((IncidentAnalysisConversionException) failure).usage();
+		}
+		assertThat(usage).isEqualTo(new dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage(12, 8, null));
+		assertThat(failure).hasNoCause().hasMessageNotContaining("PRIVATE");
 	}
 
 }

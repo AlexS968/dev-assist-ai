@@ -3,6 +3,9 @@ package dev.alexey.devassist.incident.controller;
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage;
+import org.junit.jupiter.params.provider.CsvSource;
+import java.util.concurrent.atomic.AtomicInteger;
 import dev.alexey.devassist.analysis.infrastructure.IncidentAnalysisConverter;
 import dev.alexey.devassist.analysis.validation.IncidentAnalysisValidator;
 import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.JSON;
@@ -425,7 +428,7 @@ class IncidentControllerTests {
 				.thenAnswer(invocation -> {
 					assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
 					return new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2", generatedAt,
-							125, 12, 8, 20);
+							125, 12, 8, 20, 1);
 				});
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
@@ -445,6 +448,7 @@ class IncidentControllerTests {
 				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v2"))
 				.andExpect(jsonPath("$.generatedAt").value(generatedAt.toString()))
 				.andExpect(jsonPath("$.latencyMs").value(125))
+				.andExpect(jsonPath("$.attemptCount").value(1))
 				.andExpect(jsonPath("$.inputTokens").value(12))
 				.andExpect(jsonPath("$.outputTokens").value(8))
 				.andExpect(jsonPath("$.totalTokens").value(20));
@@ -458,7 +462,7 @@ class IncidentControllerTests {
 	void analysisPreservesMissingUsageAsJsonNull() throws Exception {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
 		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
-				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null));
+				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null, 1));
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.inputTokens").value(nullValue()))
@@ -494,6 +498,8 @@ class IncidentControllerTests {
 				.andReturn();
 		assertThat(result.getResponse().getContentAsString())
 				.doesNotContain("fake-api-key", "private prompt", "provider internals", "IllegalStateException");
+		verify(gateway).analyze(any());
+		verifyNoMoreInteractions(gateway);
 	}
 
 	@Test
@@ -503,6 +509,8 @@ class IncidentControllerTests {
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isBadGateway())
 				.andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."));
+		verify(gateway).analyze(any());
+		verifyNoMoreInteractions(gateway);
 	}
 
 	@Test
@@ -510,7 +518,7 @@ class IncidentControllerTests {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
 		when(gateway.analyze(any())).thenAnswer(invocation -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2", Instant.EPOCH, 1, null, null, null);
+			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2", Instant.EPOCH, 1, null, null, null, 1);
 		});
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
@@ -535,20 +543,62 @@ class IncidentControllerTests {
 				.andReturn();
 		assertThat(result.getResponse().getContentAsString()).doesNotContain(
 				"fake-api-key", "full prompt", "private incident description", "provider.invalid", "IllegalStateException", "stackTrace");
+		verify(gateway).analyze(any());
+		verifyNoMoreInteractions(gateway);
 	}
 	@ParameterizedTest
-	@ValueSource(strings = {"malformed", "semantic"})
-	void structuredConversionFailuresReturnSanitized502(String scenario) throws Exception {
+	@CsvSource({"malformed,malformed", "semantic,semantic", "malformed,semantic", "semantic,malformed"})
+	void structuredConversionFailuresReturnSanitized502(String first, String second) throws Exception {
 		var incident = repository.save(new Incident("Title", "PRIVATE incident description", IncidentSource.API));
-		String raw = scenario.equals("malformed") ? "PRIVATE raw model response" : JSON.replace("Database timeouts", "PRIVATE".repeat(100));
+		var calls = new AtomicInteger();
 		var converter = new IncidentAnalysisConverter(new IncidentAnalysisValidator());
-		when(gateway.analyze(any())).thenAnswer(invocation -> converter.convert(raw));
+		when(gateway.analyze(any())).thenAnswer(invocation -> {
+			String scenario = calls.getAndIncrement() == 0 ? first : second;
+			return converter.convert(invalidOutput(scenario));
+		});
 		var result = mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isBadGateway())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."))
 				.andReturn();
 		assertThat(result.getResponse().getContentAsString()).doesNotContain("PRIVATE", "raw model response", "summary", "violations");
+		verify(gateway).analyze(new IncidentAnalysisInput("Title", "PRIVATE incident description"));
+		verify(gateway).analyze(new IncidentAnalysisInput("Title", "PRIVATE incident description", true));
+		verifyNoMoreInteractions(gateway);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"malformed", "semantic"})
+	void successfulRepairReturnsAttemptCountAndAggregatedUsage(String scenario) throws Exception {
+		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
+		var before = repository.findById(incident.getId()).orElseThrow();
+		var converter = new IncidentAnalysisConverter(new IncidentAnalysisValidator());
+		when(gateway.analyze(new IncidentAnalysisInput("Title", "Description"))).thenAnswer(invocation -> {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			return converter.convert(invalidOutput(scenario), new IncidentAnalysisAttemptUsage(10, 5, 15));
+		});
+		when(gateway.analyze(new IncidentAnalysisInput("Title", "Description", true))).thenAnswer(invocation -> {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
+					Instant.EPOCH, 25, 12, 8, 20, 1);
+		});
+		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.attemptCount").value(2))
+				.andExpect(jsonPath("$.inputTokens").value(22))
+				.andExpect(jsonPath("$.outputTokens").value(13))
+				.andExpect(jsonPath("$.totalTokens").value(35))
+				.andExpect(jsonPath("$.analysis.summary").value("Database timeouts"))
+				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v2"))
+				.andExpect(jsonPath("$.content").doesNotExist());
+		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description"));
+		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description", true));
+		verifyNoMoreInteractions(gateway);
+		assertThat(repository.findById(incident.getId()).orElseThrow()).usingRecursiveComparison().isEqualTo(before);
+	}
+
+	private String invalidOutput(String scenario) {
+		return scenario.equals("malformed") ? "PRIVATE raw model response" : JSON.replace("Database timeouts", "PRIVATE".repeat(100));
 	}
 
 }

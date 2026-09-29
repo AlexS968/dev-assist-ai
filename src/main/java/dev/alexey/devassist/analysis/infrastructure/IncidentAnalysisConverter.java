@@ -1,6 +1,8 @@
 package dev.alexey.devassist.analysis.infrastructure;
 
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisConversionException;
+import dev.alexey.devassist.analysis.exception.IncidentAnalysisValidationException;
+import dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage;
 import dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis;
 import dev.alexey.devassist.analysis.validation.IncidentAnalysisValidator;
 import tools.jackson.core.JacksonException;
@@ -36,6 +38,19 @@ public final class IncidentAnalysisConverter {
 
 	public IncidentAnalysisConverter(IncidentAnalysisValidator validator) {
 		this.validator = validator;
+	}
+
+	/** Preserve only safe attempt telemetry when conversion or validation fails. */
+	public StructuredIncidentAnalysis convert(String content, IncidentAnalysisAttemptUsage usage) {
+		try {
+			return convert(content);
+		}
+		catch (IncidentAnalysisConversionException exception) {
+			throw new IncidentAnalysisConversionException(usage);
+		}
+		catch (IncidentAnalysisValidationException exception) {
+			throw new IncidentAnalysisValidationException(exception.violations(), usage);
+		}
 	}
 
 	public StructuredIncidentAnalysis convert(String content) {

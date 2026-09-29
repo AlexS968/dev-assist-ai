@@ -2,12 +2,13 @@
 
 Both adapters now request native structured output using one canonical resource,
 `schemas/incident-analysis-v2.json`. The gateway result and REST response carry
-`analysis` plus unchanged provider/model/promptVersion/timing/nullable token metadata.
+`analysis` plus provider/model/promptVersion/timing/nullable token metadata and
+`attemptCount` (1 for initial success, 2 after successful repair).
 The old plain-text `content` field is removed. Controller still delegates only to
 service; service uses MapStruct to map to separate REST DTO records with Swagger
 annotations. Core records remain independent of Jackson and Swagger.
-ADR-003 remains **Proposed** until live structured smoke tests for both providers.
-No live calls were made for this migration.
+ADR-003 is **Accepted** following the recorded live structured smoke tests for both providers.
+No live calls were made to implement the migration or repair policy.
 
 ## Contract
 
@@ -85,7 +86,7 @@ OpenAI uses Spring AI 2.0.1 `OpenAiChatModel.ResponseFormat` with `JSON_SCHEMA`,
 the canonical schema string and `strict=true`. Spring AI converts this to the
 official client's Chat Completions `response_format.json_schema` request.
 Ollama uses `OllamaApi.ChatRequest.format` with the same schema as a JSON object;
-`think=false`, `num_predict`, transport timeouts and no-retry behavior are preserved.
+`think=false`, `num_predict`, transport timeouts and no SDK/transport retries are preserved.
 The schema requires all fields, describes types and enum values, and sets
 `additionalProperties=false` on every object. To keep the provider schema small
 and portable, sizes, nonblank strings and consecutive orders are enforced by the
@@ -109,13 +110,14 @@ incompatible with this runtime. System/user roles remain separate. Incident data
 appears only in the user message. The prompt requests concise findings, not internal
 reasoning traces. The default output budget rises from 450 to 1000 tokens, reducing
 truncation risk at potentially higher cost/latency; overrides remain supported.
-The maximum contract size can still exceed that budget. No retry, repair or fallback
-is implemented.
+The maximum contract size can still exceed that budget. One controlled repair is
+allowed as described below; SDK retries and provider fallback remain disabled.
 
-## Before live smoke tests
+## Remaining evaluation
 
 Offline tests verify native request options, strict conversion, validation, REST
-mapping and safe errors, not model quality or actual provider enforcement. Test v2
+mapping and safe errors, not model quality. The recorded v2 smoke tests establish only individual successful
+integration paths, not live repair behavior. Further evaluate v2
 with each configured model and provider version, including output limits, refusal,
 truncation and useful uncertainties. A configured model override must support native
 schema output; provider rejection remains a safe failure, never prompt-only fallback.
@@ -126,3 +128,27 @@ Sources checked against local Spring AI 2.0.1 source jars:
 [GPT-6 Luna capabilities](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [Spring AI OpenAI](https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html),
 [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
+
+## Repair and result metadata
+
+The provider-neutral `IncidentAnalysisRepairPolicy`, called by the service, permits
+at most two total attempts. Only initial conversion or semantic validation failure
+triggers the second attempt; success, unknown incident, empty output, timeout and
+provider/transport failures do not. Any second failure is final. No configurable
+retry count, recursion, loops or provider fallback is used.
+
+Both calls use the same original incident data, v2 prompt version and canonical
+native schema. A repair flag adds one shared fixed instruction asking for a complete
+schema-compliant replacement, without raw output, exception text or diagnostics.
+Adapters preserve only nullable token counts in a safe internal attempt-usage record
+attached to conversion/validation exceptions. No raw response enters exceptions.
+
+Successful repair returns `attemptCount=2`, whole-orchestration monotonic latency,
+and per-field token sums only when both values are known. Unknown values propagate
+as null independently; totals are never fabricated, and Integer overflow yields null.
+Initial success returns `attemptCount=1` with unchanged call metrics. Other metadata
+and analysis come from the successful final attempt. Nothing is persisted.
+Cost and latency may roughly double, with timeout and token limits applied per call.
+Repair improves contract reliability, not factual correctness, and can still fail
+with the existing safe 502 (or 504 for timeout). See the
+[orchestration details](ai-integration.md#controlled-structured-output-repair).

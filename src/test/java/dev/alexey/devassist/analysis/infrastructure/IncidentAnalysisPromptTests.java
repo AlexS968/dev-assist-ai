@@ -24,4 +24,18 @@ class IncidentAnalysisPromptTests {
 		assertThat(prompt.user(incident)).isEqualTo("Title: " + incident.title() + "\nDescription: " + incident.description());
 		assertThat(prompt.system()).isEqualTo(system).doesNotContain(incident.title(), incident.description());
 	}
+	@Test
+	void addsOnlyFixedRepairInstructionAndPreservesOriginalUserData() {
+		var prompt = new IncidentAnalysisPrompt("incident-analysis-v2");
+		var initial = new IncidentAnalysisInput("PRIVATE title", "PRIVATE description");
+		var repair = new IncidentAnalysisInput(initial.title(), initial.description(), true);
+		assertThat(prompt.system(initial)).isEqualTo(prompt.system())
+				.doesNotContain("previous response failed");
+		assertThat(prompt.system(repair)).startsWith(prompt.system())
+				.contains("previous response failed structural or semantic validation", "new complete answer", "JSON schema")
+				.doesNotContain("PRIVATE", "summary:", "Exception");
+		assertThat(prompt.user(repair)).isEqualTo(prompt.user(initial));
+		assertThat(prompt.version()).isEqualTo("incident-analysis-v2");
+	}
+
 }

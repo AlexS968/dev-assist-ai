@@ -10,6 +10,10 @@ import org.springframework.core.io.ClassPathResource;
 /** Loads one immutable prompt version at startup. Incident data is rendered only into the user message. */
 public final class IncidentAnalysisPrompt {
 
+	private static final String REPAIR_INSTRUCTION = "The previous response failed structural or semantic validation. "
+			+ "Generate a new complete answer strictly matching the supplied JSON schema and all stated constraints. "
+			+ "Return only the complete JSON object.";
+
 	private final String version;
 	private final String system;
 	private final PromptTemplate user;
@@ -30,6 +34,10 @@ public final class IncidentAnalysisPrompt {
 
 	public String system() {
 		return system;
+	}
+
+	public String system(IncidentAnalysisInput incident) {
+		return incident.repair() ? system + "\n" + REPAIR_INSTRUCTION : system;
 	}
 
 	public String user(IncidentAnalysisInput incident) {

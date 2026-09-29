@@ -67,7 +67,7 @@ class OpenApiTests {
 				.value("#/components/schemas/IncidentAnalysisResponseDTO").match(result);
 		jsonPath(operations[4] + ".requestBody").doesNotExist().match(result);
 		for (String field : new String[]{"provider", "model", "promptVersion", "generatedAt", "latencyMs",
-				"inputTokens", "outputTokens", "totalTokens"}) {
+				"inputTokens", "outputTokens", "totalTokens", "attemptCount"}) {
 			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".description")
 					.isNotEmpty().match(result);
 			jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties." + field + ".example")

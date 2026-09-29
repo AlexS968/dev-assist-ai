@@ -3,6 +3,7 @@ package dev.alexey.devassist.analysis.infrastructure;
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.analysis.IncidentAnalysisAttemptUsage;
 import dev.alexey.devassist.analysis.exception.EmptyIncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
@@ -51,7 +52,7 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 		long started = nanoTime.getAsLong();
 		ChatResponse response;
 		try {
-			var request = new Prompt(List.of(new SystemMessage(prompt.system()), new UserMessage(prompt.user(incident))),
+			var request = new Prompt(List.of(new SystemMessage(prompt.system(incident)), new UserMessage(prompt.user(incident))),
 					OpenAiChatOptions.builder().model(configuredModel).maxCompletionTokens(maxOutputTokens)
 						.responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_SCHEMA)
 								.jsonSchema(schema.json()).strict(true).build()).build());
@@ -80,12 +81,12 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 		var usage = metadata.getUsage();
 		boolean hasUsage = !(usage instanceof EmptyUsage);
 		String model = metadata.getModel();
-		return new IncidentAnalysisResult(converter.convert(content), "openai",
+		var attemptUsage = new IncidentAnalysisAttemptUsage(hasUsage ? usage.getPromptTokens() : null,
+				hasUsage ? usage.getCompletionTokens() : null, hasUsage ? usage.getTotalTokens() : null);
+		return new IncidentAnalysisResult(converter.convert(content, attemptUsage), "openai",
 				model.isBlank() ? configuredModel : model,
 				prompt.version(), clock.instant(), latencyMs,
-				hasUsage ? usage.getPromptTokens() : null,
-				hasUsage ? usage.getCompletionTokens() : null,
-				hasUsage ? usage.getTotalTokens() : null);
+				attemptUsage.inputTokens(), attemptUsage.outputTokens(), attemptUsage.totalTokens(), 1);
 	}
 
 	private static boolean isTransportTimeout(Throwable failure) {

@@ -22,7 +22,7 @@ class IncidentAnalysisServiceTests {
 
 	private final IncidentRepository repository = mock(IncidentRepository.class);
 	private final IncidentAnalysisGateway gateway = mock(IncidentAnalysisGateway.class);
-	private final IncidentAnalysisService service = new IncidentAnalysisService(repository, gateway,
+	private final IncidentAnalysisService service = new IncidentAnalysisService(repository, new dev.alexey.devassist.analysis.IncidentAnalysisRepairPolicy(gateway, System::nanoTime),
 			Mappers.getMapper(IncidentMapper.class));
 
 	@Test
@@ -32,7 +32,7 @@ class IncidentAnalysisServiceTests {
 		when(repository.findById(id)).thenReturn(Optional.of(incident));
 		var input = new IncidentAnalysisInput("Title", "Description");
 		var result = new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2",
-				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20);
+				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20, 1);
 		when(gateway.analyze(input)).thenReturn(result);
 
 		assertThat(service.analyze(id)).usingRecursiveComparison().isEqualTo(result);
