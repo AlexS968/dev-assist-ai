@@ -152,3 +152,27 @@ Cost and latency may roughly double, with timeout and token limits applied per c
 Repair improves contract reliability, not factual correctness, and can still fail
 with the existing safe 502 (or 504 for timeout). See the
 [orchestration details](ai-integration.md#controlled-structured-output-repair).
+
+## Post-repair-policy live evidence
+
+The project owner reported HTTP 200 from both providers with
+`promptVersion=incident-analysis-v2`, successful structured conversion and semantic
+validation, and `attemptCount=1`. Neither invoked repair or reached the configured
+`AI_MAX_OUTPUT_TOKENS=1000` output limit.
+
+| provider | model | latencyMs | inputTokens | outputTokens | totalTokens |
+|---|---|---|---|---|---|
+| openai | gpt-6-luna | 8619 | 424 | 667 | 1091 |
+| ollama | qwen3:14b | 23141 | 310 | 596 | null |
+
+This confirms the observed happy path after changing orchestration, not the live
+repair path. Repair error combinations and attempt limits are tested deterministically
+offline. No invalid live response was artificially induced because of nondeterminism
+and extra cost. No new live calls were made for this documentation update.
+
+OpenAI phrased hypotheses more cautiously in these runs; Ollama again assigned HIGH
+without sufficient evidence, now for a connection-leak hypothesis. These observations
+belong in future evaluation and do not indicate a structured-output mechanism error.
+One run of each provider is not a benchmark. No full prompts, incident title/description,
+full responses, credentials or validation diagnostics are retained. ADR-003 remains
+**Accepted**; see the [smoke-test record](ai-integration.md#live-smoke-tests-after-the-repair-policy).

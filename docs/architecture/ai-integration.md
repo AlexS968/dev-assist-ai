@@ -383,3 +383,42 @@ reliability but cannot guarantee a valid second response or factual correctness.
 There is no backoff, provider fallback or further repair. Offline deterministic tests
 cover attempt limits, error combinations, safe REST errors, request options and
 metadata aggregation. Live repair behavior and broader evaluation remain future work.
+
+## Live smoke tests after the repair policy
+
+The project owner reported one live happy-path test per provider after the
+orchestration change. No new live calls were made for this documentation update;
+execution dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| latencyMs | 8619 | 23141 |
+| inputTokens | 424 | 310 |
+| outputTokens | 667 | 596 |
+| totalTokens | 1091 | null |
+| attemptCount | 1 | 1 |
+| Structured conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000, not reached | 1000, not reached |
+| Repair invoked | No | No |
+
+Both providers worked successfully after the orchestration change. These runs
+exercise the initial-success path, not the live repair path. Repair scenarios are
+covered by deterministic automated tests. An invalid live response was not
+artificially provoked because that would be nondeterministic and incur additional
+cost. The Ollama total remains null rather than a synthesized sum; no timeout
+configuration is inferred from the reported latency.
+
+Qualitative observation from these runs: OpenAI phrased its hypotheses more
+cautiously. Ollama again assigned HIGH without sufficient evidence, this time to a
+connection-leak hypothesis. This is input for future evaluation, not a failure of
+the structured-output mechanism. One run per provider is not a benchmark and does
+not establish a general provider ranking.
+
+Only the supplied metadata and qualitative observations are retained here: no full
+prompt, incident title/description, full model response, credentials or validation
+diagnostics. ADR-003 remains **Accepted**.

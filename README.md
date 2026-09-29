@@ -315,6 +315,34 @@ and [ADR-003 acceptance](docs/adr/ADR-003-ai-framework.md#acceptance-outcome).
 No additional live calls were made for this documentation update; no full prompts,
 incident title/description, model responses or credentials are recorded.
 
+### Happy-path checks after repair orchestration
+
+The project owner reported these additional live results with
+`promptVersion=incident-analysis-v2`:
+
+| Field | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider / model | openai / gpt-6-luna | ollama / qwen3:14b |
+| latencyMs | 8619 | 23141 |
+| inputTokens / outputTokens | 424 / 667 | 310 / 596 |
+| totalTokens | 1091 | null |
+| attemptCount | 1 | 1 |
+
+Both passed structured conversion and semantic validation, stayed below the
+`AI_MAX_OUTPUT_TOKENS=1000` output limit, and did not invoke repair. Both providers
+therefore worked on the happy path after the orchestration change; these runs do
+not prove the live repair path. Repair scenarios are covered by deterministic
+automated tests. Invalid live output was not artificially provoked because of
+nondeterminism and additional cost.
+
+OpenAI phrased hypotheses more cautiously in these runs. Ollama again assigned HIGH
+without sufficient evidence, this time to a connection-leak hypothesis. This is an
+observation for future evaluation, not a structured-output error. One run per
+provider is not a benchmark. ADR-003 remains **Accepted**. See
+[the detailed record](docs/architecture/ai-integration.md#live-smoke-tests-after-the-repair-policy).
+No new live calls or sensitive source data were added for this documentation update.
+
 ## Roadmap
 
 1. Engineering foundation
@@ -363,7 +391,7 @@ prioritization, not probability or measured confidence. No `rootCause` is assert
 See the [structured contract](docs/architecture/structured-incident-analysis.md).
 
 - analysis is synchronous and results are not persisted;
-- the two successful v2 smoke tests establish integration evidence, not a benchmark or full evaluation;
+- successful v2 smoke tests, including the post-repair-policy happy path, establish integration evidence, not a benchmark or full evaluation;
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
