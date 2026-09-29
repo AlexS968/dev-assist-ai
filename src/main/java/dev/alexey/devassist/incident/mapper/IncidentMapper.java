@@ -1,6 +1,12 @@
 package dev.alexey.devassist.incident.mapper;
 
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis;
+import dev.alexey.devassist.analysis.model.ProbableCause;
+import dev.alexey.devassist.analysis.model.InvestigationStep;
+import dev.alexey.devassist.incident.dto.StructuredIncidentAnalysisDTO;
+import dev.alexey.devassist.incident.dto.ProbableCauseDTO;
+import dev.alexey.devassist.incident.dto.InvestigationStepDTO;
 import dev.alexey.devassist.incident.dto.IncidentAnalysisResponseDTO;
 
 import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
@@ -21,6 +27,12 @@ public interface IncidentMapper {
 	IncidentResponseDTO toResponse(Incident incident);
 
 	IncidentAnalysisResponseDTO toAnalysisResponse(IncidentAnalysisResult result);
+
+	StructuredIncidentAnalysisDTO toStructuredAnalysis(StructuredIncidentAnalysis analysis);
+
+	ProbableCauseDTO toProbableCause(ProbableCause cause);
+
+	InvestigationStepDTO toInvestigationStep(InvestigationStep step);
 
 	List<IncidentResponseDTO> toResponses(List<Incident> incidents);
 

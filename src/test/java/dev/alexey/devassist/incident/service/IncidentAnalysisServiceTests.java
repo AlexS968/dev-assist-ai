@@ -3,6 +3,7 @@ package dev.alexey.devassist.incident.service;
 import dev.alexey.devassist.analysis.IncidentAnalysisGateway;
 import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import dev.alexey.devassist.analysis.IncidentAnalysisResult;
+import static dev.alexey.devassist.analysis.StructuredAnalysisFixtures.analysis;
 import dev.alexey.devassist.incident.entity.Incident;
 import dev.alexey.devassist.incident.enums.IncidentSource;
 import dev.alexey.devassist.incident.exception.IncidentNotFoundException;
@@ -21,7 +22,7 @@ class IncidentAnalysisServiceTests {
 
 	private final IncidentRepository repository = mock(IncidentRepository.class);
 	private final IncidentAnalysisGateway gateway = mock(IncidentAnalysisGateway.class);
-	private final IncidentAnalysisService service = new IncidentAnalysisService(repository, gateway,
+	private final IncidentAnalysisService service = new IncidentAnalysisService(repository, new dev.alexey.devassist.analysis.IncidentAnalysisRepairPolicy(gateway, System::nanoTime),
 			Mappers.getMapper(IncidentMapper.class));
 
 	@Test
@@ -30,8 +31,8 @@ class IncidentAnalysisServiceTests {
 		var incident = new Incident("Title", "Description", IncidentSource.MONITORING);
 		when(repository.findById(id)).thenReturn(Optional.of(incident));
 		var input = new IncidentAnalysisInput("Title", "Description");
-		var result = new IncidentAnalysisResult("Analysis", "fake", "test-model", "incident-analysis-v1",
-				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20);
+		var result = new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2",
+				Instant.parse("2026-09-27T12:00:00Z"), 125, 12, 8, 20, 1);
 		when(gateway.analyze(input)).thenReturn(result);
 
 		assertThat(service.analyze(id)).usingRecursiveComparison().isEqualTo(result);

@@ -29,7 +29,7 @@ public class OllamaConfiguration {
 
 	@Bean
 	IncidentAnalysisGateway ollamaIncidentAnalysisGateway(OllamaApi api, AiProperties properties,
-			IncidentAnalysisPrompt prompt) {
-		return new OllamaIncidentAnalysisGateway(api, properties, prompt, Clock.systemUTC(), System::nanoTime);
+			IncidentAnalysisPrompt prompt, IncidentAnalysisConverter converter, IncidentAnalysisSchema schema) {
+		return new OllamaIncidentAnalysisGateway(api, properties, prompt, Clock.systemUTC(), System::nanoTime, converter, schema);
 	}
 }

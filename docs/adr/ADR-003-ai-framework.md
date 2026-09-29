@@ -1,6 +1,6 @@
 # ADR-003: Select the AI application framework
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-20
 
 ## Context
@@ -27,12 +27,12 @@ The main candidates are:
 - LangChain4J;
 - direct provider SDK integration.
 
-## Proposed decision
+## Decision
 
-Use Spring AI as the primary AI application framework, subject to validation in
-a small integration spike during the first LLM phase.
+Use Spring AI as the primary AI application framework. The integration spike and
+reported live structured-output tests satisfy the acceptance criteria.
 
-Keep application-specific boundaries such as `IssueAnalysisGenerator` around
+Keep application-specific boundaries such as `IncidentAnalysisGateway` around
 probabilistic operations. Business code should depend on those boundaries rather
 than provider-specific classes.
 
@@ -93,9 +93,9 @@ against the selected provider instead of assuming uniform behavior.
 Pin stable versions and isolate framework usage inside the AI infrastructure
 boundary.
 
-## Validation required before acceptance
+## Original acceptance criteria
 
-The integration spike must demonstrate:
+The integration spike was required to demonstrate:
 
 - one successful model call;
 - structured output conversion;
@@ -176,19 +176,136 @@ Quality observation: the response was useful and structured in presentation, but
 some hypotheses were more general and speculative than in the observed OpenAI
 response. This is a single observation, not a benchmark or a general provider
 ranking. Comparative evaluation will be a separate phase. Structured presentation
-does not establish schema-validated structured output, which is still absent.
+does not establish schema-validated structured output, which was absent at that stage.
 
 Acceptance evidence now covers successful OpenAI and Ollama model calls, usage metadata, fake
 replacement, safe provider-error handling, and offline transport-timeout wiring
 and 504 translation. Tests inspect actual OkHttp timeout configuration and simulate
 transport exceptions without network calls or sleep. Live timeout expiry has not
-been measured. Structured-output conversion is still not implemented, so the
-status remains **Proposed** under the existing acceptance criteria.
+been measured. At the end of Phase 2, structured-output conversion was not implemented,
+so the status remained **Proposed** under the existing acceptance criteria.
 
 See [implementation boundaries](../architecture/ai-integration.md).
 
+## Structured-output implementation — 2026-09-28
+
+Both providers now request the same canonical schema through native request options:
+OpenAI strict JSON Schema response format and Ollama `format`. A dedicated strict
+Jackson reader and application validator gate every returned analysis; REST now
+exposes `analysis` and metadata. Offline tests cover conversion, semantic rejection
+and safe errors. No live structured-output request was made and no retry/repair was
+added during that implementation step. Historical v1 smoke tests did not establish
+v2 behavior, so the status remained Proposed until the evidence below was supplied.
+
+## Live structured-output smoke tests
+
+The project owner reported the following two real smoke tests using
+`incident-analysis-v2`. These are supplied observations; no additional live model
+calls were made to document them. Test dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| Schema conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000 | 1000 |
+| latencyMs | Not supplied | 25458 |
+| inputTokens | Not supplied | 310 |
+| outputTokens | Not supplied | 662 |
+| totalTokens | Not supplied | null |
+
+The Ollama response contained 3 probable causes, 4 consecutively numbered
+investigation steps and uncertainties. Its output token limit of 1000 was not
+reached. The null total is preserved, not calculated from input/output counts.
+No OpenAI latency or token usage is inferred, and no timeout override is inferred
+for either structured test. No full prompt, incident title/description, full model
+response, API key or other credentials are retained in this evidence.
+
+### Qualitative observation and evaluation follow-up
+
+These are individual smoke tests, not a benchmark or a full evaluation. Ollama
+produced a usable structured response, but assigned HIGH to a connection-pool
+misconfiguration hypothesis without sufficient evidence. Its recommendation to
+increase pool size requires checking PostgreSQL capacity first; otherwise it may
+increase contention. These reported observations are input to a future evaluation
+phase, not a structured-output runtime defect. Schema conversion and semantic
+validation establish contract compliance, not factual correctness or calibrated
+likelihood.
+
+## Acceptance outcome
+
+Status is **Accepted**. The following criteria are fulfilled:
+
+- Spring AI integration through the pinned framework and provider adapters;
+- a provider-neutral `IncidentAnalysisGateway`, replaceable with a fake in tests;
+- both OpenAI and Ollama providers;
+- an immutable, versioned prompt contract;
+- native structured output using one shared JSON Schema;
+- strict conversion followed by full semantic validation;
+- transport-level timeout handling and safe provider-error translation, verified offline;
+- token and latency metadata, preserving unavailable token counts as null;
+- successful live structured-output smoke tests for both providers, reported above.
+
+Acceptance concerns the framework and integration boundaries. It does not establish
+production reliability or model-quality equivalence. General retries, provider
+fallback, analysis-result persistence and full evaluation remain unimplemented.
+The bounded repair addition below does not change these acceptance claims. Existing incident persistence is separate.
+Live timeout expiry has not been measured; the recorded timeout evidence remains
+transport configuration and offline exception/504 tests.
+
+## Addendum: controlled repair
+
+Status remains **Accepted**. A provider-neutral policy outside both adapters now
+permits one repair after initial conversion/validation failure, with a hard maximum
+of two calls and no provider fallback or SDK retry. Safe token telemetry survives
+invalid attempts; successful repair reports aggregate usage, orchestration latency
+and attemptCount=2. A fixed shared instruction reuses v2 and the canonical schema
+without exposing invalid output or diagnostics. Existing smoke tests do not validate
+live repair; cost, latency and factual-quality evaluation remain future work.
+
+## Live smoke tests after the repair policy
+
+The project owner reported one live happy-path test per provider after the
+orchestration change. No new live calls were made for this documentation update;
+execution dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| latencyMs | 8619 | 23141 |
+| inputTokens | 424 | 310 |
+| outputTokens | 667 | 596 |
+| totalTokens | 1091 | null |
+| attemptCount | 1 | 1 |
+| Structured conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000, not reached | 1000, not reached |
+| Repair invoked | No | No |
+
+Both providers worked successfully after the orchestration change. These runs
+exercise the initial-success path, not the live repair path. Repair scenarios are
+covered by deterministic automated tests. An invalid live response was not
+artificially provoked because that would be nondeterministic and incur additional
+cost. The Ollama total remains null rather than a synthesized sum; no timeout
+configuration is inferred from the reported latency.
+
+Qualitative observation from these runs: OpenAI phrased its hypotheses more
+cautiously. Ollama again assigned HIGH without sufficient evidence, this time to a
+connection-leak hypothesis. This is input for future evaluation, not a failure of
+the structured-output mechanism. One run per provider is not a benchmark and does
+not establish a general provider ranking.
+
+Only the supplied metadata and qualitative observations are retained here: no full
+prompt, incident title/description, full model response, credentials or validation
+diagnostics. ADR-003 remains **Accepted**.
+
 ## Revisit when
 
-Change the status to `Accepted` after the integration spike satisfies the remaining
-validation criteria. Reject or supersede this ADR if Spring AI cannot meet the
-required behavior without excessive workarounds.
+Revisit or supersede this decision if provider compatibility or future evaluation
+shows that Spring AI cannot meet the required behavior without excessive workarounds.

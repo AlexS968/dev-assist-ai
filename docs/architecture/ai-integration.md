@@ -1,8 +1,8 @@
-# Phase 2: incident analysis
+# Phase 3: structured incident analysis
 
 `POST /api/v1/incidents/{id}/analysis` generates a synchronous analysis for an
-existing incident. The request has no body. It returns 200 with content, provider,
-model, promptVersion, generatedAt, latencyMs and nullable inputTokens/outputTokens/totalTokens.
+existing incident. The request has no body. It returns 200 with structured analysis, provider,
+model, promptVersion, generatedAt, latencyMs, attemptCount and nullable inputTokens/outputTokens/totalTokens.
 An unknown UUID returns the existing 404 ProblemDetail; provider failures and
 null/empty/blank content return a sanitized 502 ProblemDetail. Transport timeouts
 return 504 with a fixed safe message. No analysis is saved.
@@ -12,13 +12,14 @@ return 504 with a fixed safe message. No analysis is saved.
 - `IncidentApi` declares the HTTP and OpenAPI contract. `IncidentController` only
   delegates to services; it has no mapper, repository or gateway dependency.
 - `IncidentAnalysisService` loads the incident, creates an immutable title/description
-  snapshot, invokes `IncidentAnalysisGateway`, and maps the result to the response DTO.
-- `IncidentMapper` maps both existing incident responses and analysis results.
+  snapshot, invokes `IncidentAnalysisRepairPolicy` around the selected gateway, and maps the result to the response DTO.
+- `IncidentMapper` maps both existing incident responses and analysis results, including
+  dedicated StructuredIncidentAnalysisDTO, ProbableCauseDTO and InvestigationStepDTO records.
   Existing incident response mapping now takes place in `IncidentService`.
 - `IncidentAnalysisInput` and `IncidentAnalysisResult` are application value objects;
-  the latter carries plain text and metadata, with no framework/provider types.
+  the latter carries validated StructuredIncidentAnalysis and metadata, with no framework/provider types.
 - `OpenAiIncidentAnalysisGateway` isolates Spring AI, builds separate system/user
-  messages, and reads content, actual model and usage from ChatResponse. If no model
+  messages, and reads JSON, actual model and usage from ChatResponse. If no model
   is reported, the configured model is returned. EmptyUsage becomes null counts;
   reported zero counts remain zero. Missing totals are not calculated by the adapter.
 - `IncidentAnalysisException` wraps provider failures. Its distinct subtype
@@ -34,8 +35,12 @@ return 504 with a fixed safe message. No analysis is saved.
 IncidentController -> IncidentAnalysisService -> IncidentRepository
                                  |
                                  v
-                      IncidentAnalysisGateway <- OpenAiIncidentAnalysisGateway
-                                                           -> Spring AI -> OpenAI
+                      IncidentAnalysisRepairPolicy
+                                 |
+                                 v
+                      IncidentAnalysisGateway
+                        /                  \
+             OpenAI adapter             Ollama adapter
 ```
 
 The analysis service uses `Propagation.NOT_SUPPORTED` to suspend any caller
@@ -47,7 +52,8 @@ transactions can still retain resources. Analysis uses a snapshot: later inciden
 updates are not reflected in an already-running request.
 
 `generatedAt` is the application receipt time in UTC. `latencyMs` measures the
-model call with a monotonic timer, not wall-clock subtraction. Tests inject fixed
+model call with a monotonic timer on initial success; after repair it measures the
+whole orchestration, not wall-clock subtraction. Tests inject fixed
 clock/timer values and never sleep.
 
 ## Dependency and configuration decisions
@@ -75,7 +81,7 @@ No sampling parameters are imposed on the selected model.
 `app.ai.provider=${AI_PROVIDER:openai}` is validated against exactly `openai|ollama`.
 Conditional configuration registers exactly one IncidentAnalysisGateway: the
 existing OpenAI implementation or OllamaIncidentAnalysisGateway. Controller and
-services are unchanged and do not import provider classes. There is no fallback.
+services do not import provider classes. There is no fallback.
 The OpenAI gateway resolves and validates the key only in its selected configuration.
 An Ollama-only application can start with OPENAI_API_KEY completely absent.
 
@@ -153,18 +159,18 @@ Quality observation: the response was useful and structured in presentation, but
 some hypotheses were more general and speculative than in the observed OpenAI
 response. This is a single observation, not a benchmark or a general provider
 ranking. Comparative evaluation will be a separate phase. Structured presentation
-does not establish schema-validated structured output, which is still absent.
+does not establish schema-validated structured output, which was absent at that stage.
 
 ## Versioned prompt contract
 
-`incident-analysis-v1` maps explicitly to these UTF-8 classpath resources:
+`incident-analysis-v2` maps explicitly to these UTF-8 classpath resources:
 
-- `prompts/incident-analysis/v1/system.st`
-- `prompts/incident-analysis/v1/user.st`
+- `prompts/incident-analysis/v2/system.st`
+- `prompts/incident-analysis/v2/user.st`
 
 The system message asks for at most three likely causes and four concrete
-investigation steps, uncertainty and evidence, with short bullets and no unsupported
-root-cause claim. Incident content is untrusted data and cannot be interpolated into
+investigation steps, uncertainty and evidence, with JSON-only output and no unsupported
+root-cause claim. Explanations and rationales are concise findings, not internal reasoning traces. Incident content is untrusted data and cannot be interpolated into
 system instructions. The user template binds only title and description; values are
 not recursively rendered as templates. Role separation reduces instruction confusion
 but does not guarantee that a model will resist every prompt injection.
@@ -175,14 +181,17 @@ new directory and explicitly register a new identifier, rather than rewriting v1
 
 | Application property | Environment variable | Default | Validation |
 |---|---|---|---|
-| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v1` | Nonblank, registered version |
-| `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `450` | Integer, 1–16384 |
+| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v2` | Nonblank, compatible version |
+| `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `1000` | Integer, 1–16384 |
 
+The 1000-token default allows room for JSON and reduces truncation risk compared with
+450 tokens, at potentially higher output cost and latency. It does not guarantee
+completion at the maximum contract sizes. Configuration overrides remain available.
 The upper bound is an application guardrail; provider/model capabilities can be
 more restrictive. OpenAI-specific `maxCompletionTokens` is applied to each request
 inside the infrastructure adapter. The adapter calls ChatModel directly with a
 Prompt, avoiding ChatClient's automatic tool-calling advisor and preserving empty-output
-and partial-usage handling. No temperature, retries or fallback are added.
+and partial-usage handling. No temperature, SDK retries or provider fallback are added.
 For reasoning models, the completion budget may include reasoning tokens and can
 truncate visible output. The current contract does not expose the finish reason.
 
@@ -205,7 +214,7 @@ app.ai.timeout -> spring.ai.openai.timeout
 The SDK timeout includes the entire HTTP call, including request/response body I/O;
 read/write timeouts inherit that budget. OkHttp handles cancellation at transport
 level. No CompletableFuture race leaves a detached request running in the background.
-The existing SDK `max-retries=0` is unchanged; no retry/fallback mechanism is added.
+The existing SDK `max-retries=0` is unchanged; no transport retry or provider fallback is added.
 
 SpringAiOpenAiHttpClient wraps I/O failures in `OpenAIIoException`. The adapter
 walks the cause chain for `SocketTimeoutException` or OkHttp's whole-call
@@ -243,12 +252,173 @@ ChatResponseMetadata (`Objects.requireNonNullElse`), so ordinary construction ca
 produce a null getter result. The missing-metadata test exercises this constructor
 path without reflection; a separate test covers null generation output.
 
-There is no analysis persistence, structured output, retry/fallback policy, RAG,
+There is no analysis persistence, provider fallback, RAG,
 tool calling. This endpoint is synchronous and has no new
 rate limiting or authentication. Repeated requests generate fresh analyses.
 Two user-reported live smoke tests on 2026-09-27 succeeded with gpt-6-luna
 (see ADR-003). The second used incident-analysis-v1, took 5816 ms and produced
 383 output tokens within the 450-token budget; the response was complete.
 No repeat live request was made for timeout implementation. Timeout wiring and
-error translation are tested offline; structured-output conversion remains
-outstanding, so ADR-003 remains Proposed.
+error translation and structured-output conversion are tested offline. The reported
+live v2 tests below complete the integration acceptance evidence; ADR-003 is Accepted.
+
+## Native structured output and validation
+
+The [structured contract](structured-incident-analysis.md) is now wired into both
+adapters and the REST response. The canonical `schemas/incident-analysis-v2.json`
+requires every property, restricts likelihood to LOW/MEDIUM/HIGH, and forbids unknown
+properties on each object. It intentionally leaves business limits to the application.
+OpenAI receives `ResponseFormat.JSON_SCHEMA` with that schema and `strict=true`;
+Ollama receives the same schema object in `ChatRequest.format`.
+This uses official native mechanisms, not prompt-only JSON instructions.
+
+The dedicated Jackson 3 `IncidentAnalysisConverter` rejects malformed JSON, trailing
+content, unknown fields, invalid enums, missing/null required fields, duplicate keys
+and scalar coercion. It then invokes the complete application validator, including
+unique consecutive 1..N order checks, before returning a structured result.
+Conversion failures retain no Jackson cause, prompt or response; semantic validation
+failures retain only safe paths/messages. Both map to the fixed existing 502 response.
+Empty output, provider failures and 504 transport timeout behavior are preserved.
+No regex fallback or SDK retry is introduced. The controlled policy below permits
+one additional request only after conversion/validation failure.
+
+Runtime startup accepts only v2; immutable v1 resources remain for historical evidence.
+System and user messages stay separate; only user messages contain incident data.
+The REST `content` field is removed atomically in favor of `analysis`; metadata and
+nullable usage semantics are unchanged. Swagger types are confined to REST DTOs.
+Tests cover schema request equality, nested DTO schemas, strict conversion, validation
+before return and safe ProblemDetail mapping. The two live tests below validate the
+observed integration paths. Broader model-quality evaluation, refusal behavior,
+provider-version compatibility and budget adequacy across incidents remain future work.
+
+## Live structured-output smoke tests
+
+The project owner reported the following two real smoke tests using
+`incident-analysis-v2`. These are supplied observations; no additional live model
+calls were made to document them. Test dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| Schema conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000 | 1000 |
+| latencyMs | Not supplied | 25458 |
+| inputTokens | Not supplied | 310 |
+| outputTokens | Not supplied | 662 |
+| totalTokens | Not supplied | null |
+
+The Ollama response contained 3 probable causes, 4 consecutively numbered
+investigation steps and uncertainties. Its output token limit of 1000 was not
+reached. The null total is preserved, not calculated from input/output counts.
+No OpenAI latency or token usage is inferred, and no timeout override is inferred
+for either structured test. No full prompt, incident title/description, full model
+response, API key or other credentials are retained in this evidence.
+
+### Qualitative observation and evaluation follow-up
+
+These are individual smoke tests, not a benchmark or a full evaluation. Ollama
+produced a usable structured response, but assigned HIGH to a connection-pool
+misconfiguration hypothesis without sufficient evidence. Its recommendation to
+increase pool size requires checking PostgreSQL capacity first; otherwise it may
+increase contention. These reported observations are input to a future evaluation
+phase, not a structured-output runtime defect. Schema conversion and semantic
+validation establish contract compliance, not factual correctness or calibrated
+likelihood.
+
+## Controlled structured-output repair
+
+`IncidentAnalysisRepairPolicy` is a provider-neutral application component between
+`IncidentAnalysisService` and the selected `IncidentAnalysisGateway`. Both adapters
+still implement that single interface; the controller only knows the service.
+The always-enabled policy has a hard maximum of **two total attempts** and no
+configurable retry count, loops, recursive retry, background work or sleep.
+
+```text
+Controller -> Service -> RepairPolicy -> selected Gateway -> conversion + validation
+                             |
+                 conversion/validation failure only
+                             |
+                             +--------> same Gateway, repair=true (final attempt)
+```
+
+Only `IncidentAnalysisConversionException` or `IncidentAnalysisValidationException`
+from the initial attempt triggers repair. Success, empty output, provider/transport
+errors and timeouts never trigger it. Unknown incidents fail before the policy is
+called. Any second failure propagates without another attempt: conversion/validation
+and provider/empty failures retain the safe 502 response, and timeout retains 504.
+No provider fallback or SDK/transport retries are enabled.
+
+The repair request reuses the original title/description, selected provider,
+canonical JSON Schema and `incident-analysis-v2`. The input carries a boolean repair
+flag. The shared prompt builder appends a fixed system instruction stating that the
+previous response failed structural or semantic validation and requesting a new,
+complete schema-compliant JSON answer. Initial system/user templates are unchanged.
+No raw invalid response, exception text, validation diagnostics or stack trace is
+added. Incident data remains only in the original user message. OpenAI strict
+JSON_SCHEMA and Ollama format/think=false/num_predict apply on both attempts.
+
+Conversion stays inside the adapters. Before conversion, each adapter captures
+`IncidentAnalysisAttemptUsage`, an internal provider-neutral record of nullable
+input/output/total token counts. Conversion/validation exceptions carry only this
+safe telemetry (and existing safe validation paths), never raw response data or a
+Jackson cause. This lets orchestration aggregate usage even when the first attempt
+has no valid analysis result. Telemetry is not exposed as client diagnostics.
+
+`attemptCount` is 1 on initial success and 2 after successful repair. Initial-success
+latency and usage are unchanged. After repair, `latencyMs` is the monotonic elapsed
+time of the whole orchestration, including both calls and conversion/validation.
+Each token field is summed independently only when both attempts report it; otherwise
+that field is null, never a partial sum. Totals are not synthesized from input/output
+counts. A sum exceeding the public Integer range is also null rather than wrapped.
+Analysis, model/provider, promptVersion and generatedAt come from the successful
+second attempt. Responses and telemetry are not persisted in PostgreSQL.
+
+Repair may roughly double cost and latency; the existing timeout and output-token
+budget apply per call, not to the whole orchestration. It improves contract
+reliability but cannot guarantee a valid second response or factual correctness.
+There is no backoff, provider fallback or further repair. Offline deterministic tests
+cover attempt limits, error combinations, safe REST errors, request options and
+metadata aggregation. Live repair behavior and broader evaluation remain future work.
+
+## Live smoke tests after the repair policy
+
+The project owner reported one live happy-path test per provider after the
+orchestration change. No new live calls were made for this documentation update;
+execution dates were not supplied.
+
+| Observation | OpenAI | Ollama |
+|---|---|---|
+| HTTP status | 200 | 200 |
+| provider | openai | ollama |
+| model | gpt-6-luna | qwen3:14b |
+| promptVersion | incident-analysis-v2 | incident-analysis-v2 |
+| latencyMs | 8619 | 23141 |
+| inputTokens | 424 | 310 |
+| outputTokens | 667 | 596 |
+| totalTokens | 1091 | null |
+| attemptCount | 1 | 1 |
+| Structured conversion | Passed | Passed |
+| Semantic validation | Passed | Passed |
+| AI_MAX_OUTPUT_TOKENS | 1000, not reached | 1000, not reached |
+| Repair invoked | No | No |
+
+Both providers worked successfully after the orchestration change. These runs
+exercise the initial-success path, not the live repair path. Repair scenarios are
+covered by deterministic automated tests. An invalid live response was not
+artificially provoked because that would be nondeterministic and incur additional
+cost. The Ollama total remains null rather than a synthesized sum; no timeout
+configuration is inferred from the reported latency.
+
+Qualitative observation from these runs: OpenAI phrased its hypotheses more
+cautiously. Ollama again assigned HIGH without sufficient evidence, this time to a
+connection-leak hypothesis. This is input for future evaluation, not a failure of
+the structured-output mechanism. One run per provider is not a benchmark and does
+not establish a general provider ranking.
+
+Only the supplied metadata and qualitative observations are retained here: no full
+prompt, incident title/description, full model response, credentials or validation
+diagnostics. ADR-003 remains **Accepted**.

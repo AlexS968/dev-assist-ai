@@ -10,14 +10,18 @@ import org.springframework.core.io.ClassPathResource;
 /** Loads one immutable prompt version at startup. Incident data is rendered only into the user message. */
 public final class IncidentAnalysisPrompt {
 
+	private static final String REPAIR_INSTRUCTION = "The previous response failed structural or semantic validation. "
+			+ "Generate a new complete answer strictly matching the supplied JSON schema and all stated constraints. "
+			+ "Return only the complete JSON object.";
+
 	private final String version;
 	private final String system;
 	private final PromptTemplate user;
 
 	public IncidentAnalysisPrompt(String version) {
 		String directory = switch (version) {
-			case "incident-analysis-v1" -> "prompts/incident-analysis/v1/";
-			default -> throw new IllegalArgumentException("Unsupported incident analysis prompt version: " + version);
+			case "incident-analysis-v2" -> "prompts/incident-analysis/v2/";
+			default -> throw new IllegalArgumentException("Unsupported or incompatible incident analysis prompt version: " + version);
 		};
 		this.version = version;
 		this.system = read(directory + "system.st");
@@ -30,6 +34,10 @@ public final class IncidentAnalysisPrompt {
 
 	public String system() {
 		return system;
+	}
+
+	public String system(IncidentAnalysisInput incident) {
+		return incident.repair() ? system + "\n" + REPAIR_INSTRUCTION : system;
 	}
 
 	public String user(IncidentAnalysisInput incident) {
