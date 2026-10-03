@@ -13,7 +13,7 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 4 — RAG storage foundation**
+**Phase 4 — RAG storage and controlled Markdown ingestion**
 
 Currently implemented:
 
@@ -22,6 +22,7 @@ Currently implemented:
 - Spring AI 2.0.1 OpenAI/Ollama adapters with native JSON schema and offline tests;
 - PostgreSQL 17 with pgvector extension;
 - isolated KnowledgeBase, document and chunk persistence;
+- provider-neutral Markdown ingestion with normalization, SHA-256, deterministic chunking and transactional updates;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -397,7 +398,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage exists, but ingestion, embeddings, vector search, retrieval, grounding and citations are pending;
+- RAG storage and application-service ingestion exist, but public upload API, embeddings, vector search, retrieval, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

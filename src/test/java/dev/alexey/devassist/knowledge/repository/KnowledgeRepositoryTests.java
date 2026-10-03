@@ -132,7 +132,7 @@ class KnowledgeRepositoryTests {
     @Test void documentUpdateChangesUpdatedAtAndPreservesCreatedAt() {
         KnowledgeDocument document = document(base("payments"), "runbook");
         Instant created = document.getCreatedAt();
-        document.setTitle("Revised");
+        document.update("Revised", document.getSourceType(), document.getSourceUri(), document.getContentHash());
         documents.saveAndFlush(document);
         entityManager.clear();
         KnowledgeDocument loaded = documents.findById(document.getId()).orElseThrow();

@@ -1,8 +1,10 @@
 package dev.alexey.devassist.knowledge.entity;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -44,4 +46,13 @@ public class KnowledgeChunk {
     public String getContentHash() { return contentHash; }
     public Map<String, String> getMetadata() { return Map.copyOf(metadata); }
     public Instant getCreatedAt() { return createdAt; }
+
+    public void updateSourceTypeMetadata(KnowledgeSourceType sourceType) {
+        if (sourceType == null) {
+            throw new IllegalArgumentException("sourceType is required");
+        }
+        Map<String, String> updated = new HashMap<>(metadata);
+        updated.put("sourceType", sourceType.name());
+        metadata = Map.copyOf(updated);
+    }
 }

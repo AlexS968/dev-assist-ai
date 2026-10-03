@@ -50,8 +50,15 @@ public class KnowledgeDocument {
     public String getContentHash() { return contentHash; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
-    public void setTitle(String title) { this.title = title; }
-    public void setSourceType(KnowledgeSourceType sourceType) { this.sourceType = sourceType; }
-    public void setSourceUri(String sourceUri) { this.sourceUri = sourceUri; }
-    public void setContentHash(String contentHash) { this.contentHash = contentHash; }
+    public void update(String title, KnowledgeSourceType sourceType, String sourceUri, String contentHash) {
+        if (title == null || title.isBlank() || title.length() > 500 || sourceType == null
+                || (sourceUri != null && (sourceUri.isBlank() || sourceUri.length() > 2000))
+                || contentHash == null || !contentHash.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("Invalid document update");
+        }
+        this.title = title;
+        this.sourceType = sourceType;
+        this.sourceUri = sourceUri;
+        this.contentHash = contentHash;
+    }
 }
