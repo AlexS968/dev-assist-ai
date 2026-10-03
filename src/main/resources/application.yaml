@@ -38,6 +38,13 @@ spring:
 
 app:
   rag:
+    enabled: ${RAG_ENABLED:false}
+    embedding:
+      provider: ${RAG_EMBEDDING_PROVIDER:openai}
+      openai-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+      ollama-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+      dimensions: ${RAG_EMBEDDING_DIMENSIONS:768}
+      timeout: ${RAG_EMBEDDING_TIMEOUT:20s}
     chunking:
       max-chars: ${RAG_CHUNK_MAX_CHARS:1500}
       overlap-chars: ${RAG_CHUNK_OVERLAP_CHARS:200}

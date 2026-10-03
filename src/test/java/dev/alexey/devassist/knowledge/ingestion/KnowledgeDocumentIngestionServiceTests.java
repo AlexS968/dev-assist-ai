@@ -4,6 +4,7 @@ import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 import dev.alexey.devassist.knowledge.entity.KnowledgeChunk;
 import dev.alexey.devassist.knowledge.entity.KnowledgeDocument;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
+import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
 import dev.alexey.devassist.knowledge.exception.KnowledgeBaseNotFoundException;
 import dev.alexey.devassist.knowledge.model.IngestKnowledgeDocumentCommand;
 import dev.alexey.devassist.knowledge.model.KnowledgeDocumentIngestionResult;
@@ -13,6 +14,7 @@ import dev.alexey.devassist.knowledge.repository.KnowledgeChunkRepository;
 import dev.alexey.devassist.knowledge.repository.KnowledgeDocumentRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,6 +59,13 @@ class KnowledgeDocumentIngestionServiceTests {
     }
     private List<KnowledgeChunk> chunks(UUID documentId) {
         return chunks.findByDocument_IdOrderByChunkIndexAsc(documentId);
+    }
+    private void embedFirstChunk(UUID documentId) {
+        float[] vector = new float[768];
+        Arrays.fill(vector, 0.25f);
+        chunks(documentId).getFirst().setEmbedding(vector,
+                new EmbeddingProfile("openai", "text-embedding-3-small", 768), Instant.now());
+        chunks.flush();
     }
     private List<ChunkSnapshot> snapshots(UUID documentId) {
         return chunks(documentId).stream().map(chunk -> new ChunkSnapshot(chunk.getId(), chunk.getContent(),
@@ -104,6 +113,7 @@ class KnowledgeDocumentIngestionServiceTests {
         KnowledgeBase base = base("payments");
         String content = "# Runbook\n" + "Check steps. ".repeat(200);
         KnowledgeDocumentIngestionResult created = ingestion.ingest(command(base.getId(), content));
+        embedFirstChunk(created.documentId());
         entityManager.flush();
         entityManager.clear();
         List<ChunkSnapshot> before = snapshots(created.documentId());
@@ -124,6 +134,7 @@ class KnowledgeDocumentIngestionServiceTests {
         assertThat(loaded.getSourceType()).isEqualTo(KnowledgeSourceType.TROUBLESHOOTING_GUIDE);
         assertThat(loaded.getUpdatedAt()).isAfter(oldTime);
         assertThat(loaded.getContentHash()).isEqualTo(created.contentHash());
+        assertThat(chunks(created.documentId()).getFirst().getEmbedding()).hasSize(768);
         assertThat(after).hasSameSizeAs(before);
         for (int index = 0; index < before.size(); index++) {
             ChunkSnapshot old = before.get(index);
@@ -173,6 +184,7 @@ class KnowledgeDocumentIngestionServiceTests {
     @Test void changedContentReplacesOldChunks() {
         KnowledgeBase base = base("payments");
         KnowledgeDocumentIngestionResult created = ingestion.ingest(command(base.getId(), "Old content"));
+        embedFirstChunk(created.documentId());
         UUID oldChunk = chunks(created.documentId()).getFirst().getId();
         KnowledgeDocumentIngestionResult result = ingestion.ingest(command(base.getId(), "New content"));
         entityManager.flush();
@@ -181,6 +193,7 @@ class KnowledgeDocumentIngestionServiceTests {
         assertThat(result.documentId()).isEqualTo(created.documentId());
         assertThat(chunks.findById(oldChunk)).isEmpty();
         assertThat(chunks(created.documentId())).singleElement().extracting(KnowledgeChunk::getContent).isEqualTo("New content");
+        assertThat(chunks(created.documentId()).getFirst().getEmbedding()).isNull();
     }
 
     @Test void sameExternalIdInDifferentBasesIsIndependent() {

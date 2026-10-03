@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
+import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -29,6 +30,18 @@ public class KnowledgeChunk {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(columnDefinition = "vector(768)")
+    private float[] embedding;
+    @Column(name = "embedding_provider", length = 50)
+    private String embeddingProvider;
+    @Column(name = "embedding_model", length = 255)
+    private String embeddingModel;
+    @Column(name = "embedding_dimensions")
+    private Integer embeddingDimensions;
+    @Column(name = "embedded_at")
+    private Instant embeddedAt;
+
     protected KnowledgeChunk() {}
     public KnowledgeChunk(KnowledgeDocument document, int chunkIndex, String content,
             String contentHash, Map<String, String> metadata) {
@@ -46,6 +59,34 @@ public class KnowledgeChunk {
     public String getContentHash() { return contentHash; }
     public Map<String, String> getMetadata() { return Map.copyOf(metadata); }
     public Instant getCreatedAt() { return createdAt; }
+    public float[] getEmbedding() { return embedding == null ? null : embedding.clone(); }
+    public String getEmbeddingProvider() { return embeddingProvider; }
+    public String getEmbeddingModel() { return embeddingModel; }
+    public Integer getEmbeddingDimensions() { return embeddingDimensions; }
+    public Instant getEmbeddedAt() { return embeddedAt; }
+
+    public void setEmbedding(float[] vector, EmbeddingProfile profile, Instant embeddedAt) {
+        if (vector == null || profile == null || embeddedAt == null || vector.length != 768) {
+            throw new IllegalArgumentException("Invalid embedding state");
+        }
+        for (float value : vector) {
+            if (!Float.isFinite(value)) throw new IllegalArgumentException("Embedding must be finite");
+        }
+        if (profile.dimensions() != 768) throw new IllegalArgumentException("Embedding dimensions must be 768");
+        embedding = vector.clone();
+        embeddingProvider = profile.provider();
+        embeddingModel = profile.model();
+        embeddingDimensions = profile.dimensions();
+        this.embeddedAt = embeddedAt;
+    }
+
+    public void clearEmbedding() {
+        embedding = null;
+        embeddingProvider = null;
+        embeddingModel = null;
+        embeddingDimensions = null;
+        embeddedAt = null;
+    }
 
     public void updateSourceTypeMetadata(KnowledgeSourceType sourceType) {
         if (sourceType == null) {

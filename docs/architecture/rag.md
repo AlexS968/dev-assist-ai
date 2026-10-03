@@ -23,6 +23,33 @@ Chunks are exact substrings of normalized document content. Metadata `characterS
 
 The database unique constraint on `(knowledge_base_id, external_id)` is the final uniqueness guard. Concurrent first ingestion for one external ID can race after both transactions observe absence; one transaction fails and rolls back safely. Concurrent updates to an existing document are not serialized by an application lock and can overwrite one another or fail on chunk-index uniqueness; callers must serialize such writes until an explicit concurrency policy is added. There is no retry or distributed lock.
 
-Chunks have no embeddings and are not used for retrieval. Still pending: KnowledgeBase REST management, Incident association, embeddings, vector column and index, similarity search, retrieval and fallback, prompt grounding, citations, prompt injection protection and RAG evaluation. Current incident analysis continues without RAG.
+Ingestion creates chunks without embeddings, and no chunks are used for retrieval. Still pending: KnowledgeBase REST management, Incident association, automatic embedding, vector index, similarity search, retrieval and fallback, prompt grounding, citations, prompt injection protection and RAG evaluation. Current incident analysis continues without RAG.
 
 See [ADR-004](../adr/ADR-004-rag-storage-foundation.md).
+
+## Embedding foundation
+
+`RAG_ENABLED` defaults to `false`. The entire embedding configuration is conditional
+on `app.rag.enabled=true`; disabled mode has no `KnowledgeEmbeddingGateway`,
+`EmbeddingProfile`, OpenAI/Ollama embedding options, or RAG-specific embedding
+client. It does not bind or validate unused embedding provider settings or require
+embedding credentials. There is no no-op gateway. Storage, Flyway and ingestion
+remain active; incident analysis proceeds without a KnowledgeBase or embeddings.
+Spring AI's built-in embedding auto-configuration is independently disabled by
+`spring.ai.model.embedding=none`, while chat auto-configuration is retained.
+
+| Chat (`AI_PROVIDER`) | `RAG_ENABLED` | Embedding provider | OpenAI key needed |
+|---|---|---|---|
+| `openai` | `false` | none | for chat |
+| `ollama` | `false` | none | no |
+| `openai` | `true` | `ollama` | for chat |
+| `ollama` | `true` | `openai` | for embeddings |
+| `ollama` | `true` | `ollama` | no |
+
+The embedding provider is independent of the incident chat provider. `RAG_EMBEDDING_PROVIDER` defaults to `openai` and accepts `openai` or `ollama`. `OPENAI_EMBEDDING_MODEL` defaults to `text-embedding-3-small`; `OLLAMA_EMBEDDING_MODEL` defaults to `nomic-embed-text`. `RAG_EMBEDDING_DIMENSIONS` defaults to 768 and currently accepts only 768. `RAG_EMBEDDING_TIMEOUT` defaults to `20s`. OpenAI embeddings use `OPENAI_API_KEY`; Ollama embeddings reuse `OLLAMA_BASE_URL`. Pull the local model ahead of use with `ollama pull nomic-embed-text`. Provider selection does not change `AI_PROVIDER`.
+
+OpenAI explicitly sends `dimensions=768` in its embedding request and disables SDK retries. Ollama uses Spring AI's `/api/embed` client with an ordered list of inputs in one batch request and a transport-level connect/read timeout. Spring AI's Ollama implementation converts a missing `prompt_eval_count` to zero; the adapter reports zero as unknown (`null`) rather than claiming measured usage. The adapter validates response count, indices, finite values and dimensions, and returns only safe errors. No live request occurs at startup and ingestion does not call the gateway.
+
+Flyway V3 adds nullable `vector(768)` plus provider, model, dimension and timestamp columns. Database checks require the five fields to be all null or all non-null, with dimension 768. Hibernate's official `hibernate-vector` module maps a defensively copied `float[]` using `SqlTypes.VECTOR`. Metadata-only document updates preserve embeddings; content changes replace chunks without embeddings.
+
+A stored embedding is compatible with the active `EmbeddingProfile` only when provider, model and dimensions all match. Equal dimensionality alone is insufficient. Stale embeddings remain stored until a future re-embedding operation replaces them; retrieval must filter them out. No HNSW/IVFFlat index, similarity search, background embedding job or prompt grounding exists yet. See [ADR-005](../adr/ADR-005-embedding-foundation.md).

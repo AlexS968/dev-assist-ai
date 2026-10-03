@@ -13,7 +13,7 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 4 — RAG storage and controlled Markdown ingestion**
+**Phase 4 — RAG storage, ingestion and embedding foundation**
 
 Currently implemented:
 
@@ -23,6 +23,7 @@ Currently implemented:
 - PostgreSQL 17 with pgvector extension;
 - isolated KnowledgeBase, document and chunk persistence;
 - provider-neutral Markdown ingestion with normalization, SHA-256, deterministic chunking and transactional updates;
+- independently selected OpenAI/Ollama embedding gateway and nullable PostgreSQL `vector(768)` storage;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -85,7 +86,8 @@ docker compose ps
 ```
 
 For the default OpenAI provider, provide `OPENAI_API_KEY` in your shell or IDE
-environment. Alternatively, select `AI_PROVIDER=ollama` without a key (see Configuration).
+environment. Alternatively, select both `AI_PROVIDER=ollama` and
+`RAG_EMBEDDING_PROVIDER=ollama` without a key (see Configuration).
 Then run the application:
 
 ```bash
@@ -219,13 +221,19 @@ Local defaults are provided for development:
 | `DB_USERNAME` | `dev_assist` |
 | `DB_PASSWORD` | `dev_assist` |
 | `AI_PROVIDER` | `openai` (allowed: `openai`, `ollama`) |
-| `OPENAI_API_KEY` | Required only for `openai`; no default |
+| `OPENAI_API_KEY` | Required when either chat or embedding provider is `openai`; no default |
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `OLLAMA_MODEL` | `qwen3:14b` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` |
 | `AI_PROMPT_VERSION` | `incident-analysis-v2` |
 | `AI_MAX_OUTPUT_TOKENS` | `1000` |
 | `AI_TIMEOUT` | `20s` |
+| `RAG_ENABLED` | `false`; enables embedding runtime when `true` |
+| `RAG_EMBEDDING_PROVIDER` | `openai` (allowed: `openai`, `ollama`) |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` |
+| `RAG_EMBEDDING_DIMENSIONS` | `768` (only supported value) |
+| `RAG_EMBEDDING_TIMEOUT` | `20s` |
 
 The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -268,12 +276,20 @@ provider stops processing or billing work already received.
 Switch manually in the shell or IDE environment before restarting the application:
 
 ```bash
-# Local Ollama: no OPENAI_API_KEY is needed.
+# Local Ollama chat with disabled RAG needs no OPENAI_API_KEY.
 unset OPENAI_API_KEY
 export AI_PROVIDER=ollama
+export RAG_ENABLED=false
 export OLLAMA_MODEL=qwen3:14b
 export OLLAMA_BASE_URL=http://localhost:11434
 ```
+
+To enable Ollama embeddings independently, set `RAG_ENABLED=true` and
+`RAG_EMBEDDING_PROVIDER=ollama`. For OpenAI chat with Ollama embeddings, keep
+`AI_PROVIDER=openai`; for Ollama chat with OpenAI embeddings, set
+`AI_PROVIDER=ollama`, `RAG_ENABLED=true`, `RAG_EMBEDDING_PROVIDER=openai` and
+provide `OPENAI_API_KEY`. These choices do not enable retrieval or change the
+incident analysis prompt.
 
 To switch back, set `AI_PROVIDER=openai` and provide `OPENAI_API_KEY` securely in
 your environment. `OPENAI_MODEL` defaults to `gpt-6-luna`. Selection is explicit;
@@ -293,6 +309,15 @@ Ollama reports input/output counts separately; absent counts, including an
 unreported total, are returned as null.
 
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
+Embedding runtime is disabled by default (`RAG_ENABLED=false`). Storage and
+ingestion remain available; no `KnowledgeEmbeddingGateway`, embedding client or
+embedding credentials are required. Incident analysis does not depend on a
+KnowledgeBase or embedding provider. When enabled, embedding provider selection
+is independent of `AI_PROVIDER`: OpenAI embeddings require `OPENAI_API_KEY`,
+while Ollama embeddings use `OLLAMA_BASE_URL`. For local Ollama embeddings, run
+`ollama pull nomic-embed-text` before use. Ingestion does not automatically
+generate embeddings. See [RAG architecture](docs/architecture/rag.md)
+and [ADR-005](docs/adr/ADR-005-embedding-foundation.md).
 
 ## Structured-output smoke-test results
 
@@ -398,7 +423,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage and application-service ingestion exist, but public upload API, embeddings, vector search, retrieval, grounding and citations are pending;
+- RAG storage, ingestion and embedding infrastructure exist, but public upload API, automatic embedding, vector search, retrieval, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

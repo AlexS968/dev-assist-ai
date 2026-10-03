@@ -2,8 +2,10 @@ package dev.alexey.devassist.knowledge.repository;
 
 import dev.alexey.devassist.knowledge.entity.*;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
+import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -98,6 +100,80 @@ class KnowledgeRepositoryTests {
         assertThat(jdbc.queryForObject("SELECT source_type FROM knowledge_documents WHERE id = ?", String.class,
                 document.getId())).isEqualTo("RUNBOOK");
     }
+    private float[] vector() {
+        float[] values = new float[768];
+        Arrays.fill(values, 0.25f);
+        return values;
+    }
+
+    @Test void vectorColumnHas768DimensionsAndExistingChunkCanRemainUnembedded() {
+        Integer dimensions = jdbc.queryForObject("""
+                SELECT atttypmod FROM pg_attribute
+                WHERE attrelid = 'knowledge_chunks'::regclass AND attname = 'embedding'
+                """, Integer.class);
+        assertThat(dimensions).isEqualTo(768);
+        KnowledgeChunk chunk = chunk(document(base("payments"), "plain"), 0, Map.of());
+        entityManager.clear();
+        KnowledgeChunk loaded = chunks.findById(chunk.getId()).orElseThrow();
+        assertThat(loaded.getEmbedding()).isNull();
+        assertThat(loaded.getEmbeddingProvider()).isNull();
+        assertThat(loaded.getEmbeddingModel()).isNull();
+        assertThat(loaded.getEmbeddingDimensions()).isNull();
+        assertThat(loaded.getEmbeddedAt()).isNull();
+    }
+
+    @Test void embeddingRoundTripsWithDefensiveCopyAndCanBeCleared() {
+        KnowledgeChunk chunk = chunk(document(base("payments"), "vector"), 0, Map.of());
+        float[] input = vector();
+        Instant embeddedAt = Instant.parse("2026-10-03T12:00:00Z");
+        chunk.setEmbedding(input, new EmbeddingProfile("openai", "text-embedding-3-small", 768), embeddedAt);
+        input[0] = 99f;
+        chunks.flush();
+        entityManager.clear();
+        KnowledgeChunk loaded = chunks.findById(chunk.getId()).orElseThrow();
+        assertThat(loaded.getEmbedding()).hasSize(768).startsWith(0.25f);
+        assertThat(loaded.getEmbeddingProvider()).isEqualTo("openai");
+        assertThat(loaded.getEmbeddingModel()).isEqualTo("text-embedding-3-small");
+        assertThat(loaded.getEmbeddingDimensions()).isEqualTo(768);
+        assertThat(loaded.getEmbeddedAt()).isEqualTo(embeddedAt);
+        float[] exposed = loaded.getEmbedding();
+        exposed[1] = 99f;
+        assertThat(loaded.getEmbedding()[1]).isEqualTo(0.25f);
+        loaded.clearEmbedding();
+        chunks.flush();
+        entityManager.clear();
+        KnowledgeChunk cleared = chunks.findById(chunk.getId()).orElseThrow();
+        assertThat(cleared.getEmbedding()).isNull();
+        assertThat(cleared.getEmbeddingProvider()).isNull();
+        assertThat(cleared.getEmbeddingModel()).isNull();
+        assertThat(cleared.getEmbeddingDimensions()).isNull();
+        assertThat(cleared.getEmbeddedAt()).isNull();
+    }
+
+    @Test void databaseRejectsPartialEmbeddingState() {
+        KnowledgeChunk chunk = chunk(document(base("payments"), "partial"), 0, Map.of());
+        assertThatThrownBy(() -> jdbc.update("UPDATE knowledge_chunks SET embedding_provider = ? WHERE id = ?",
+                "openai", chunk.getId())).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test void databaseRejectsOtherEmbeddingDimensions() {
+        KnowledgeChunk chunk = chunk(document(base("payments"), "dimension"), 0, Map.of());
+        chunk.setEmbedding(vector(), new EmbeddingProfile("openai", "text-embedding-3-small", 768), Instant.now());
+        chunks.flush();
+        assertThatThrownBy(() -> jdbc.update("UPDATE knowledge_chunks SET embedding_dimensions = ? WHERE id = ?",
+                512, chunk.getId())).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test void embeddingsRemainScopedToTheirKnowledgeBase() {
+        KnowledgeChunk first = chunk(document(base("payments"), "shared"), 0, Map.of());
+        KnowledgeChunk second = chunk(document(base("orders"), "shared"), 0, Map.of());
+        first.setEmbedding(vector(), new EmbeddingProfile("openai", "text-embedding-3-small", 768), Instant.now());
+        chunks.flush();
+        entityManager.clear();
+        assertThat(chunks.findById(first.getId()).orElseThrow().getEmbedding()).isNotNull();
+        assertThat(chunks.findById(second.getId()).orElseThrow().getEmbedding()).isNull();
+    }
+
     @Test void duplicateChunkIndexIsRejected() {
         KnowledgeDocument document = document(base("payments"), "runbook");
         chunk(document, 0, Map.of());
