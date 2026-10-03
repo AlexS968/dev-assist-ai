@@ -13,14 +13,15 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 3 — Native structured incident analysis**
+**Phase 4 — RAG storage foundation**
 
 Currently implemented:
 
 - Java 21 and Spring Boot 4.1.1;
 - incident creation, retrieval, listing and status API;
 - Spring AI 2.0.1 OpenAI/Ollama adapters with native JSON schema and offline tests;
-- PostgreSQL;
+- PostgreSQL 17 with pgvector extension;
+- isolated KnowledgeBase, document and chunk persistence;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -56,6 +57,7 @@ deployment unit, and explicit boundaries between business capabilities.
 See:
 
 - [Current architecture](docs/architecture/README.md)
+- [RAG storage foundation](docs/architecture/rag.md)
 - [Architecture Decision Records](docs/adr/README.md)
 
 ## Prerequisites
@@ -183,7 +185,7 @@ use mocks and do not consume tokens.
 Docker must be running because integration tests use Testcontainers.
 
 The tests do not use the PostgreSQL instance from `compose.yaml`. They start an
-isolated temporary PostgreSQL container and apply the same Flyway migrations
+isolated temporary pgvector/PostgreSQL container and apply the same Flyway migrations
 used by the application.
 
 Run all checks:
@@ -395,7 +397,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- no vector search;
+- RAG storage exists, but ingestion, embeddings, vector search, retrieval, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

@@ -21,3 +21,4 @@ risks.
 | [ADR-001](ADR-001-modular-monolith.md) | Use a modular monolith | Accepted |
 | [ADR-002](ADR-002-postgresql.md) | Use PostgreSQL as the primary datastore | Accepted |
 | [ADR-003](ADR-003-ai-framework.md) | Select the AI application framework | Proposed |
+| [ADR-004](ADR-004-rag-storage-foundation.md) | RAG storage foundation | Accepted |

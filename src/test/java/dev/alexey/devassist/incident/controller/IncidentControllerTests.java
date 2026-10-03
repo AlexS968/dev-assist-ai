@@ -72,7 +72,7 @@ class IncidentControllerTests {
 
 	@Container
 	@ServiceConnection
-	static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+	static final PostgreSQLContainer postgres = new PostgreSQLContainer(org.testcontainers.utility.DockerImageName.parse("pgvector/pgvector:0.8.6-pg17-bookworm").asCompatibleSubstituteFor("postgres"));
 
 	@Autowired
 	WebApplicationContext context;
