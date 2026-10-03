@@ -234,6 +234,8 @@ Local defaults are provided for development:
 | `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` |
 | `RAG_EMBEDDING_DIMENSIONS` | `768` (only supported value) |
 | `RAG_EMBEDDING_TIMEOUT` | `20s` |
+| `RAG_EMBEDDING_BATCH_SIZE` | `32` (1–256) |
+| `RAG_EMBEDDING_MAX_CHUNKS_PER_RUN` | `500` (1–10000) |
 
 The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -423,7 +425,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage, ingestion and embedding infrastructure exist, but public upload API, automatic embedding, vector search, retrieval, grounding and citations are pending;
+- RAG storage, ingestion and explicit embedding orchestration exist, but public upload API, automatic embedding, vector search, retrieval, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

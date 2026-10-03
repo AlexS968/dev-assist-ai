@@ -40,7 +40,7 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
         long start = nanoTime.getAsLong();
         EmbeddingResponse response;
         try {
-            response = model.call(new EmbeddingRequest(request.texts(), null));
+            response = model.call(new EmbeddingRequest(providerTexts(request), null));
         } catch (RuntimeException exception) {
             if (isTimeout(exception)) throw new KnowledgeEmbeddingTimeoutException();
             throw new KnowledgeEmbeddingException("Embedding provider unavailable");
@@ -57,6 +57,10 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
         Duration latency = Duration.ofNanos(Math.max(0, nanoTime.getAsLong() - start));
         return new KnowledgeEmbeddingResult(vectors, profile.provider(), actualModel,
                 profile.dimensions(), inputTokens, latency);
+    }
+
+    protected List<String> providerTexts(KnowledgeEmbeddingRequest request) {
+        return request.texts();
     }
 
     private List<KnowledgeEmbeddingVector> validateVectors(EmbeddingResponse response, int count) {

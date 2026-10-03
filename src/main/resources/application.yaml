@@ -45,6 +45,8 @@ app:
       ollama-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
       dimensions: ${RAG_EMBEDDING_DIMENSIONS:768}
       timeout: ${RAG_EMBEDDING_TIMEOUT:20s}
+      batch-size: ${RAG_EMBEDDING_BATCH_SIZE:32}
+      max-chunks-per-run: ${RAG_EMBEDDING_MAX_CHUNKS_PER_RUN:500}
     chunking:
       max-chars: ${RAG_CHUNK_MAX_CHARS:1500}
       overlap-chars: ${RAG_CHUNK_OVERLAP_CHARS:200}

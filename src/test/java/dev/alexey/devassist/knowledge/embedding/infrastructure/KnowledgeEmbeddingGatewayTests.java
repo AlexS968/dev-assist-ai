@@ -1,6 +1,7 @@
 package dev.alexey.devassist.knowledge.embedding.infrastructure;
 
 import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
+import dev.alexey.devassist.knowledge.embedding.EmbeddingPurpose;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingGateway;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingRequest;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingResult;
@@ -54,12 +55,14 @@ class KnowledgeEmbeddingGatewayTests {
             when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(
                     new Embedding(first, 0), new Embedding(second, 1))));
             List<String> input = new ArrayList<>(List.of("first", "second"));
-            KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(input);
+            KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(input, EmbeddingPurpose.DOCUMENT);
             input.set(0, "changed");
             KnowledgeEmbeddingResult result = gateway(provider).embed(request);
             ArgumentCaptor<EmbeddingRequest> captor = ArgumentCaptor.forClass(EmbeddingRequest.class);
             verify(model, times(1)).call(captor.capture());
-            assertThat(captor.getValue().getInstructions()).containsExactly("first", "second");
+            assertThat(captor.getValue().getInstructions()).containsExactlyElementsOf(
+                    "ollama".equals(provider) ? List.of("search_document: first", "search_document: second")
+                            : List.of("first", "second"));
             assertThat(result.provider()).isEqualTo(provider);
             assertThat(result.model()).isEqualTo("reported-model");
             assertThat(result.dimensions()).isEqualTo(768);
@@ -77,9 +80,9 @@ class KnowledgeEmbeddingGatewayTests {
     }
 
     @Test void rejectsMissingAndBlankInputBeforeProviderCall() {
-        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of()))
+        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of(), EmbeddingPurpose.DOCUMENT))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of(" ")))
+        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of(" "), EmbeddingPurpose.DOCUMENT))
                 .isInstanceOf(IllegalArgumentException.class);
         KnowledgeEmbeddingGateway gateway = gateway("openai");
         assertThatThrownBy(() -> gateway.embed(null)).isInstanceOf(IllegalArgumentException.class);
@@ -88,7 +91,7 @@ class KnowledgeEmbeddingGatewayTests {
 
     @Test void rejectsMissingMismatchedOrMalformedResponses() {
         KnowledgeEmbeddingGateway gateway = gateway("openai");
-        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("one", "two"));
+        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("one", "two"), EmbeddingPurpose.DOCUMENT);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(null);
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(vector(1f), 0))));
@@ -100,7 +103,7 @@ class KnowledgeEmbeddingGatewayTests {
 
     @Test void rejectsWrongDimensionsAndNonFiniteVectors() {
         KnowledgeEmbeddingGateway gateway = gateway("ollama");
-        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("one"));
+        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("one"), EmbeddingPurpose.DOCUMENT);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(new float[3], 0))));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         float[] nan = vector(1f);
@@ -115,7 +118,7 @@ class KnowledgeEmbeddingGatewayTests {
 
     @Test void mapsTimeoutAndGenericFailureToSafeMessages() {
         KnowledgeEmbeddingGateway gateway = gateway("openai");
-        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("private chunk"));
+        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("private chunk"), EmbeddingPurpose.DOCUMENT);
         when(model.call(any(EmbeddingRequest.class))).thenThrow(new RuntimeException(
                 new SocketTimeoutException("private chunk and internal URL")));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingTimeoutException.class)
@@ -128,7 +131,7 @@ class KnowledgeEmbeddingGatewayTests {
     @Test void missingResponseMetadataUsesConfiguredModelAndNullableUsage() {
         when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(
                 List.of(new Embedding(vector(1f), 0))));
-        KnowledgeEmbeddingResult result = gateway("ollama").embed(new KnowledgeEmbeddingRequest(List.of("text")));
+        KnowledgeEmbeddingResult result = gateway("ollama").embed(new KnowledgeEmbeddingRequest(List.of("text"), EmbeddingPurpose.DOCUMENT));
         assertThat(result.model()).isEqualTo("configured-model");
         assertThat(result.inputTokens()).isNull();
     }
@@ -137,7 +140,7 @@ class KnowledgeEmbeddingGatewayTests {
         when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(
                 List.of(new Embedding(vector(1f), 0)),
                 new EmbeddingResponseMetadata("nomic-embed-text", new DefaultUsage(0, 0))));
-        KnowledgeEmbeddingResult result = gateway("ollama").embed(new KnowledgeEmbeddingRequest(List.of("text")));
+        KnowledgeEmbeddingResult result = gateway("ollama").embed(new KnowledgeEmbeddingRequest(List.of("text"), EmbeddingPurpose.DOCUMENT));
         assertThat(result.inputTokens()).isNull();
     }
 
@@ -147,5 +150,19 @@ class KnowledgeEmbeddingGatewayTests {
         assertThat(profile.matches("ollama", "model", 768)).isFalse();
         assertThat(profile.matches("openai", "other", 768)).isFalse();
         assertThat(profile.matches("openai", "model", null)).isFalse();
+    }
+
+    @Test void queryPurposeIsTranslatedOnlyForOllamaWithoutMutatingInput() {
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(vector(1f), 0))));
+        KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("question"), EmbeddingPurpose.QUERY);
+        gateway("ollama").embed(request);
+        var captor = ArgumentCaptor.forClass(EmbeddingRequest.class);
+        verify(model).call(captor.capture());
+        assertThat(captor.getValue().getInstructions()).containsExactly("search_query: question");
+        assertThat(request.texts()).containsExactly("question");
+        clearInvocations(model);
+        gateway("openai").embed(request);
+        verify(model).call(captor.capture());
+        assertThat(captor.getValue().getInstructions()).containsExactly("question");
     }
 }

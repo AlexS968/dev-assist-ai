@@ -2,6 +2,7 @@ package dev.alexey.devassist.knowledge.embedding.infrastructure;
 
 import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingGateway;
+import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingOrchestrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
@@ -15,14 +16,17 @@ class EmbeddingConfigurationTests {
             .withPropertyValues("app.rag.embedding.openai-model=text-embedding-3-small",
                     "app.rag.embedding.ollama-model=nomic-embed-text",
                     "app.rag.embedding.dimensions=768", "app.rag.embedding.timeout=20s",
+                    "app.rag.embedding.batch-size=32", "app.rag.embedding.max-chunks-per-run=500",
                     "app.ai.ollama-base-url=http://127.0.0.1:1", "app.rag.enabled=true");
 
     @Test void disabledFeatureCreatesNoEmbeddingBeansAndIgnoresInvalidProperties() {
         runner.withPropertyValues("app.rag.enabled=false", "app.rag.embedding.provider=unknown",
-                "app.rag.embedding.dimensions=512", "app.rag.embedding.timeout=0s")
+                "app.rag.embedding.dimensions=512", "app.rag.embedding.timeout=0s",
+                "app.rag.embedding.batch-size=0", "app.rag.embedding.max-chunks-per-run=0")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(KnowledgeEmbeddingGateway.class);
+                    assertThat(context).doesNotHaveBean(KnowledgeEmbeddingOrchestrator.class);
                     assertThat(context).doesNotHaveBean(EmbeddingProfile.class);
                     assertThat(context).doesNotHaveBean(EmbeddingProperties.class);
                     assertThat(context).doesNotHaveBean(OpenAiEmbeddingOptions.class);
@@ -67,6 +71,17 @@ class EmbeddingConfigurationTests {
                 .run(context -> assertThat(context).hasFailed());
     }
 
+    @Test void invalidBatchAndRunLimitsFailFast() {
+        for (String property : java.util.List.of("app.rag.embedding.batch-size", "app.rag.embedding.max-chunks-per-run")) {
+            runner.withPropertyValues("app.rag.embedding.provider=ollama", property + "=0")
+                    .run(context -> assertThat(context).hasFailed());
+        }
+        runner.withPropertyValues("app.rag.embedding.provider=ollama", "app.rag.embedding.batch-size=257")
+                .run(context -> assertThat(context).hasFailed());
+        runner.withPropertyValues("app.rag.embedding.provider=ollama", "app.rag.embedding.max-chunks-per-run=10001")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
     @Test void openAiRequiresKeyOnlyWhenSelected() {
         runner.withPropertyValues("app.rag.embedding.provider=openai")
                 .run(context -> assertThat(context).hasFailed());
@@ -75,12 +90,15 @@ class EmbeddingConfigurationTests {
     @Test void propertyOverridesSelectModelAndTimeout() {
         runner.withPropertyValues("app.rag.embedding.provider=ollama",
                 "app.rag.embedding.ollama-model=nomic-embed-text:v1.5",
-                "app.rag.embedding.timeout=7s")
+                "app.rag.embedding.timeout=7s", "app.rag.embedding.batch-size=8",
+                "app.rag.embedding.max-chunks-per-run=42")
                 .run(context -> {
                     assertThat(context.getBean(OllamaEmbeddingOptions.class).getModel())
                             .isEqualTo("nomic-embed-text:v1.5");
                     assertThat(context.getBean(EmbeddingProperties.class).timeout())
                             .isEqualTo(java.time.Duration.ofSeconds(7));
+                    assertThat(context.getBean(EmbeddingProperties.class).batchSize()).isEqualTo(8);
+                    assertThat(context.getBean(EmbeddingProperties.class).maxChunksPerRun()).isEqualTo(42);
                 });
     }
 
@@ -100,6 +118,8 @@ class EmbeddingConfigurationTests {
                     assertThat(properties.openaiModel()).isEqualTo("text-embedding-3-small");
                     assertThat(properties.dimensions()).isEqualTo(768);
                     assertThat(properties.timeout()).isEqualTo(java.time.Duration.ofSeconds(7));
+                    assertThat(properties.batchSize()).isEqualTo(32);
+                    assertThat(properties.maxChunksPerRun()).isEqualTo(500);
                 });
     }
 }

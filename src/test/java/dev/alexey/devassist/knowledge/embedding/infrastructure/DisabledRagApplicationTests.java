@@ -2,6 +2,7 @@ package dev.alexey.devassist.knowledge.embedding.infrastructure;
 
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingGateway;
 import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
+import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingOrchestrator;
 import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
 import dev.alexey.devassist.knowledge.ingestion.KnowledgeDocumentIngestionService;
@@ -26,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @SpringBootTest(properties = {"app.ai.provider=ollama", "app.rag.enabled=false",
         "app.rag.embedding.provider=unknown", "app.rag.embedding.dimensions=512",
-        "app.rag.embedding.timeout=0s", "spring.ai.openai.api-key="})
+        "app.rag.embedding.timeout=0s", "app.rag.embedding.batch-size=0",
+        "app.rag.embedding.max-chunks-per-run=0", "spring.ai.openai.api-key="})
 @Transactional
 class DisabledRagApplicationTests {
     @Container @ServiceConnection
@@ -45,6 +47,7 @@ class DisabledRagApplicationTests {
         assertThat(context.getBeansOfType(EmbeddingModel.class)).isEmpty();
         assertThat(context.getBeansOfType(EmbeddingProfile.class)).isEmpty();
         assertThat(context.getBeansOfType(EmbeddingProperties.class)).isEmpty();
+        assertThat(context.getBeansOfType(KnowledgeEmbeddingOrchestrator.class)).isEmpty();
         assertThat(bases).isNotNull();
         assertThat(documents).isNotNull();
         assertThat(chunks).isNotNull();

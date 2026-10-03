@@ -41,6 +41,9 @@ public class KnowledgeChunk {
     private Integer embeddingDimensions;
     @Column(name = "embedded_at")
     private Instant embeddedAt;
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     protected KnowledgeChunk() {}
     public KnowledgeChunk(KnowledgeDocument document, int chunkIndex, String content,
@@ -64,6 +67,7 @@ public class KnowledgeChunk {
     public String getEmbeddingModel() { return embeddingModel; }
     public Integer getEmbeddingDimensions() { return embeddingDimensions; }
     public Instant getEmbeddedAt() { return embeddedAt; }
+    public long getVersion() { return version; }
 
     public void setEmbedding(float[] vector, EmbeddingProfile profile, Instant embeddedAt) {
         if (vector == null || profile == null || embeddedAt == null || vector.length != 768) {
