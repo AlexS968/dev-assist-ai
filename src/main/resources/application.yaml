@@ -47,6 +47,10 @@ app:
       timeout: ${RAG_EMBEDDING_TIMEOUT:20s}
       batch-size: ${RAG_EMBEDDING_BATCH_SIZE:32}
       max-chunks-per-run: ${RAG_EMBEDDING_MAX_CHUNKS_PER_RUN:500}
+    retrieval:
+      top-k: ${RAG_RETRIEVAL_TOP_K:5}
+      max-top-k: ${RAG_RETRIEVAL_MAX_TOP_K:20}
+      similarity-threshold: ${RAG_RETRIEVAL_SIMILARITY_THRESHOLD:0.70}
     chunking:
       max-chars: ${RAG_CHUNK_MAX_CHARS:1500}
       overlap-chars: ${RAG_CHUNK_OVERLAP_CHARS:200}

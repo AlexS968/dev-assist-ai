@@ -150,6 +150,15 @@ class KnowledgeRepositoryTests {
         assertThat(cleared.getEmbeddedAt()).isNull();
     }
 
+    @Test void zeroEmbeddingIsRejectedBeforePersistence() {
+        KnowledgeChunk chunk = chunk(document(base("zero-vector"), "vector"), 0, Map.of());
+        float[] zero = new float[768];
+        EmbeddingProfile profile = new EmbeddingProfile("openai", "model", 768);
+        Instant timestamp = Instant.now();
+        assertThatThrownBy(() -> chunk.setEmbedding(zero, profile, timestamp))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test void databaseRejectsPartialEmbeddingState() {
         KnowledgeChunk chunk = chunk(document(base("payments"), "partial"), 0, Map.of());
         assertThatThrownBy(() -> jdbc.update("UPDATE knowledge_chunks SET embedding_provider = ? WHERE id = ?",

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
 import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
+import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingVector;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -73,9 +74,7 @@ public class KnowledgeChunk {
         if (vector == null || profile == null || embeddedAt == null || vector.length != 768) {
             throw new IllegalArgumentException("Invalid embedding state");
         }
-        for (float value : vector) {
-            if (!Float.isFinite(value)) throw new IllegalArgumentException("Embedding must be finite");
-        }
+        KnowledgeEmbeddingVector.validateNorm(vector);
         if (profile.dimensions() != 768) throw new IllegalArgumentException("Embedding dimensions must be 768");
         embedding = vector.clone();
         embeddingProvider = profile.provider();

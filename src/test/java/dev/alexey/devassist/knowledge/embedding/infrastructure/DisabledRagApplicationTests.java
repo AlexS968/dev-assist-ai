@@ -3,6 +3,7 @@ package dev.alexey.devassist.knowledge.embedding.infrastructure;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingGateway;
 import dev.alexey.devassist.knowledge.embedding.EmbeddingProfile;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingOrchestrator;
+import dev.alexey.devassist.knowledge.retrieval.KnowledgeRetrievalService;
 import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 import dev.alexey.devassist.knowledge.enums.KnowledgeSourceType;
 import dev.alexey.devassist.knowledge.ingestion.KnowledgeDocumentIngestionService;
@@ -48,6 +49,7 @@ class DisabledRagApplicationTests {
         assertThat(context.getBeansOfType(EmbeddingProfile.class)).isEmpty();
         assertThat(context.getBeansOfType(EmbeddingProperties.class)).isEmpty();
         assertThat(context.getBeansOfType(KnowledgeEmbeddingOrchestrator.class)).isEmpty();
+        assertThat(context.getBeansOfType(KnowledgeRetrievalService.class)).isEmpty();
         assertThat(bases).isNotNull();
         assertThat(documents).isNotNull();
         assertThat(chunks).isNotNull();

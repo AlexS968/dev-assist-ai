@@ -13,7 +13,7 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 4 — RAG storage, ingestion and embedding foundation**
+**Phase 4 — RAG storage, ingestion, embeddings and exact retrieval**
 
 Currently implemented:
 
@@ -24,6 +24,7 @@ Currently implemented:
 - isolated KnowledgeBase, document and chunk persistence;
 - provider-neutral Markdown ingestion with normalization, SHA-256, deterministic chunking and transactional updates;
 - independently selected OpenAI/Ollama embedding gateway and nullable PostgreSQL `vector(768)` storage;
+- explicit, provider-neutral embedding orchestration and exact PostgreSQL cosine retrieval;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -236,6 +237,9 @@ Local defaults are provided for development:
 | `RAG_EMBEDDING_TIMEOUT` | `20s` |
 | `RAG_EMBEDDING_BATCH_SIZE` | `32` (1–256) |
 | `RAG_EMBEDDING_MAX_CHUNKS_PER_RUN` | `500` (1–10000) |
+| `RAG_RETRIEVAL_TOP_K` | `5` (1–`RAG_RETRIEVAL_MAX_TOP_K`) |
+| `RAG_RETRIEVAL_MAX_TOP_K` | `20` (1–100) |
+| `RAG_RETRIEVAL_SIMILARITY_THRESHOLD` | `0.70` (0–1; calibrate on evaluation data) |
 
 The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -319,7 +323,12 @@ is independent of `AI_PROVIDER`: OpenAI embeddings require `OPENAI_API_KEY`,
 while Ollama embeddings use `OLLAMA_BASE_URL`. For local Ollama embeddings, run
 `ollama pull nomic-embed-text` before use. Ingestion does not automatically
 generate embeddings. See [RAG architecture](docs/architecture/rag.md)
-and [ADR-005](docs/adr/ADR-005-embedding-foundation.md).
+and [ADR-005](docs/adr/ADR-005-embedding-foundation.md). Exact retrieval is
+available through an explicit application service call when RAG is enabled;
+it has no public endpoint or Incident integration. It embeds a query only when
+the selected KnowledgeBase has compatible vectors. Results are scoped to that
+base and the active provider/model/dimensions profile. Retrieved content is
+untrusted and is not passed to the LLM. See [ADR-006](docs/adr/ADR-006-exact-rag-retrieval.md).
 
 ## Structured-output smoke-test results
 
@@ -425,7 +434,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage, ingestion and explicit embedding orchestration exist, but public upload API, automatic embedding, vector search, retrieval, grounding and citations are pending;
+- RAG storage, ingestion, explicit embedding orchestration and exact vector retrieval exist, but public upload API, automatic embedding, Incident association, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

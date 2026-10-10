@@ -114,6 +114,8 @@ class KnowledgeEmbeddingGatewayTests {
         infinity[0] = Float.POSITIVE_INFINITY;
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(infinity, 0))));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(new float[768], 0))));
+        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
     }
 
     @Test void mapsTimeoutAndGenericFailureToSafeMessages() {
