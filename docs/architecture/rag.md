@@ -23,7 +23,13 @@ Chunks are exact substrings of normalized document content. Metadata `characterS
 
 The database unique constraint on `(knowledge_base_id, external_id)` is the final uniqueness guard. Concurrent first ingestion for one external ID can race after both transactions observe absence; one transaction fails and rolls back safely. Concurrent updates to an existing document are not serialized by an application lock and can overwrite one another or fail on chunk-index uniqueness; callers must serialize such writes until an explicit concurrency policy is added. There is no retry or distributed lock.
 
-Ingestion creates chunks without embeddings. Still pending: KnowledgeBase REST management, Incident association, automatic embedding, vector index, retrieval fallback, prompt grounding, citations, prompt injection protection and RAG evaluation. Current incident analysis continues without RAG.
+Ingestion creates chunks without embeddings. Still pending: public document ingestion, automatic embedding, vector index, retrieval fallback, prompt grounding, citations, prompt injection protection and RAG evaluation. Current incident analysis continues without RAG.
+
+## Explicit Incident association and KnowledgeBase API
+
+A KnowledgeBase normally owns documentation for one project or service. `POST /api/v1/knowledge-bases` creates an empty base; `GET /api/v1/knowledge-bases/{id}` and paginated `GET /api/v1/knowledge-bases` expose only base metadata. Keys are trimmed but must already be lowercase machine-readable strings; names are trimmed. Duplicate keys return a safe 409 response. There is no public update, delete, ingestion, embedding or retrieval endpoint. Public deletion needs an authorization and audit policy.
+
+Incident creation accepts a nullable `knowledgeBaseId`, and `PATCH /api/v1/incidents/{id}/knowledge-base` explicitly assigns an existing base or clears the association. The application does not infer a base from title or description. A no-op PATCH preserves `updatedAt`; a real association change updates it. Flyway V5 adds a nullable indexed FK with `ON DELETE SET NULL`: deleting a base through persistence deletes its documents and chunks but preserves linked Incidents with a null FK. One base can serve many Incidents, while an Incident has at most one base. This relation exists even when `RAG_ENABLED=false`. It does not invoke retrieval or change Incident analysis. See [ADR-007](../adr/ADR-007-incident-knowledge-base-association.md).
 
 See [ADR-004](../adr/ADR-004-rag-storage-foundation.md).
 

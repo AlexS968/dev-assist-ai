@@ -67,7 +67,8 @@ It does not contain Maven, source code, or build tools.
 - incident REST API and persistence;
 - OpenAI and Ollama adapters behind the incident analysis endpoint;
 - PostgreSQL persistence infrastructure with pgvector extension;
-- isolated KnowledgeBase, document and chunk persistence;
+- isolated KnowledgeBase, document and chunk persistence, with a minimal KnowledgeBase REST API;
+- optional explicit Incident–KnowledgeBase association and exact vector retrieval service;
 - Flyway schema migrations;
 - Actuator health endpoints;
 - Docker Compose development database;
@@ -79,7 +80,6 @@ It does not contain Maven, source code, or build tools.
 
 The following components are not implemented yet:
 
-- embeddings and vector search;
 - retrieval-augmented generation;
 - operational tools;
 - MCP;

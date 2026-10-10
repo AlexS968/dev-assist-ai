@@ -13,7 +13,7 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 4 — RAG storage, ingestion, embeddings and exact retrieval**
+**Phase 4 — RAG storage, ingestion, embeddings, retrieval and explicit Incident association**
 
 Currently implemented:
 
@@ -25,6 +25,7 @@ Currently implemented:
 - provider-neutral Markdown ingestion with normalization, SHA-256, deterministic chunking and transactional updates;
 - independently selected OpenAI/Ollama embedding gateway and nullable PostgreSQL `vector(768)` storage;
 - explicit, provider-neutral embedding orchestration and exact PostgreSQL cosine retrieval;
+- optional Incident–KnowledgeBase association and minimal KnowledgeBase create/get/list API;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -294,8 +295,8 @@ To enable Ollama embeddings independently, set `RAG_ENABLED=true` and
 `RAG_EMBEDDING_PROVIDER=ollama`. For OpenAI chat with Ollama embeddings, keep
 `AI_PROVIDER=openai`; for Ollama chat with OpenAI embeddings, set
 `AI_PROVIDER=ollama`, `RAG_ENABLED=true`, `RAG_EMBEDDING_PROVIDER=openai` and
-provide `OPENAI_API_KEY`. These choices do not enable retrieval or change the
-incident analysis prompt.
+provide `OPENAI_API_KEY`. These choices do not enable retrieval during Incident
+analysis or change its prompt.
 
 To switch back, set `AI_PROVIDER=openai` and provide `OPENAI_API_KEY` securely in
 your environment. `OPENAI_MODEL` defaults to `gpt-6-luna`. Selection is explicit;
@@ -325,10 +326,22 @@ while Ollama embeddings use `OLLAMA_BASE_URL`. For local Ollama embeddings, run
 generate embeddings. See [RAG architecture](docs/architecture/rag.md)
 and [ADR-005](docs/adr/ADR-005-embedding-foundation.md). Exact retrieval is
 available through an explicit application service call when RAG is enabled;
-it has no public endpoint or Incident integration. It embeds a query only when
+it has no public endpoint or Incident analysis integration. It embeds a query only when
 the selected KnowledgeBase has compatible vectors. Results are scoped to that
 base and the active provider/model/dimensions profile. Retrieved content is
 untrusted and is not passed to the LLM. See [ADR-006](docs/adr/ADR-006-exact-rag-retrieval.md).
+
+A KnowledgeBase normally represents one project or service. Create an empty base with
+`POST /api/v1/knowledge-bases`; read it with `GET /api/v1/knowledge-bases/{id}` or list
+bases with `GET /api/v1/knowledge-bases?page=0&size=20` (maximum size 100, ordered by
+name then ID). Incident creation accepts optional `knowledgeBaseId`, and
+`PATCH /api/v1/incidents/{id}/knowledge-base` assigns an existing base or clears
+the association with `null`. The application never infers a base from incident text.
+An Incident without a base is analyzed as before. Association is available even
+when `RAG_ENABLED=false`; associating a base alone does not enable grounded
+generation. Deleting a base at the repository level leaves Incidents in place with
+null association and cascades to its documents and chunks. There is no public base
+delete endpoint yet. See [ADR-007](docs/adr/ADR-007-incident-knowledge-base-association.md).
 
 ## Structured-output smoke-test results
 
@@ -434,7 +447,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage, ingestion, explicit embedding orchestration and exact vector retrieval exist, but public upload API, automatic embedding, Incident association, grounding and citations are pending;
+- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval and optional Incident association exist, but public upload API, automatic embedding, retrieval during analysis, grounding and citations are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;

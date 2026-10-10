@@ -24,6 +24,7 @@ import org.mapstruct.ReportingPolicy;
 @Mapper(componentModel = MappingConstants.ComponentModel.SPRING, unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface IncidentMapper {
 
+	@Mapping(source = "knowledgeBase.id", target = "knowledgeBaseId")
 	IncidentResponseDTO toResponse(Incident incident);
 
 	IncidentAnalysisResponseDTO toAnalysisResponse(IncidentAnalysisResult result);

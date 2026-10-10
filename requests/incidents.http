@@ -23,6 +23,18 @@ Content-Type: application/json
 ### 2. Get the created incident
 GET {{baseUrl}}/api/v1/incidents/{{incidentId}}
 
+### Optional: assign a previously created KnowledgeBase
+PATCH {{baseUrl}}/api/v1/incidents/{{incidentId}}/knowledge-base
+Content-Type: application/json
+
+{"knowledgeBaseId":"{{knowledgeBaseId}}"}
+
+### Optional: clear the association
+PATCH {{baseUrl}}/api/v1/incidents/{{incidentId}}/knowledge-base
+Content-Type: application/json
+
+{"knowledgeBaseId":null}
+
 ### 3. List incidents (newest first)
 GET {{baseUrl}}/api/v1/incidents?page=0&size=20
 

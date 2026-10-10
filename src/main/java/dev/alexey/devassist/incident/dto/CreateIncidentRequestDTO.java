@@ -6,6 +6,7 @@ import dev.alexey.devassist.incident.enums.IncidentSource;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 @Schema(description = "Data required to create an incident; status is assigned NEW by the server")
 public record CreateIncidentRequestDTO(
@@ -15,5 +16,7 @@ public record CreateIncidentRequestDTO(
 		@NotBlank String description,
 		@Schema(description = "Report origin: MANUAL (human entry), API (external client), MONITORING (monitoring system)",
 				example = "MANUAL", allowableValues = {"MANUAL", "API", "MONITORING"})
-		@NotNull IncidentSource source) {
+		@NotNull IncidentSource source,
+		@Schema(description = "Optional KnowledgeBase UUID selected explicitly for this incident", nullable = true)
+		UUID knowledgeBaseId) {
 }

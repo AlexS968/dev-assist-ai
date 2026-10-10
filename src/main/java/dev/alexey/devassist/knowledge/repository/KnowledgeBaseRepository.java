@@ -4,4 +4,6 @@ import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, UUID> {}
+public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, UUID> {
+    boolean existsByKey(String key);
+}

@@ -2,6 +2,7 @@ package dev.alexey.devassist.incident.entity;
 
 import dev.alexey.devassist.incident.enums.IncidentSource;
 import dev.alexey.devassist.incident.enums.IncidentStatus;
+import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -13,6 +14,9 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -38,6 +42,10 @@ public class Incident {
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 30)
 	private IncidentSource source;
+
+	@ManyToOne(fetch = FetchType.LAZY, optional = true)
+	@JoinColumn(name = "knowledge_base_id")
+	private KnowledgeBase knowledgeBase;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -109,5 +117,18 @@ public class Incident {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	public KnowledgeBase getKnowledgeBase() {
+		return knowledgeBase;
+	}
+
+	public void assignKnowledgeBase(KnowledgeBase knowledgeBase) {
+		if (knowledgeBase == null) throw new IllegalArgumentException("KnowledgeBase is required");
+		this.knowledgeBase = knowledgeBase;
+	}
+
+	public void clearKnowledgeBase() {
+		knowledgeBase = null;
 	}
 }

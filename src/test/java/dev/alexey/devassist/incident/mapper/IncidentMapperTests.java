@@ -5,6 +5,7 @@ import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
 import dev.alexey.devassist.incident.entity.Incident;
 import dev.alexey.devassist.incident.enums.IncidentSource;
 import dev.alexey.devassist.incident.enums.IncidentStatus;
+import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
 
 import java.time.Instant;
 import java.util.List;
@@ -35,6 +36,17 @@ class IncidentMapperTests {
 				.returns(incident.getSource(), IncidentResponseDTO::source)
 				.returns(incident.getCreatedAt(), IncidentResponseDTO::createdAt)
 				.returns(incident.getUpdatedAt(), IncidentResponseDTO::updatedAt);
+		assertThat(mapper.toResponse(incident).knowledgeBaseId()).isNull();
+	}
+
+	@Test
+	void mapsExplicitKnowledgeBaseIdWithoutNestedContent() {
+		Incident incident = incident("Linked", IncidentSource.MANUAL, IncidentStatus.NEW);
+		KnowledgeBase base = new KnowledgeBase("linked", "Linked", null);
+		UUID id = UUID.randomUUID();
+		ReflectionTestUtils.setField(base, "id", id);
+		incident.assignKnowledgeBase(base);
+		assertThat(mapper.toResponse(incident).knowledgeBaseId()).isEqualTo(id);
 	}
 
 	@Test
@@ -51,8 +63,8 @@ class IncidentMapperTests {
 				.returns(9L, IncidentPageResponseDTO::totalElements)
 				.returns(5, IncidentPageResponseDTO::totalPages);
 		assertThat(response.items()).hasSize(2);
-		assertThat(response.items().get(0)).usingRecursiveComparison().isEqualTo(first);
-		assertThat(response.items().get(1)).usingRecursiveComparison().isEqualTo(second);
+		assertThat(response.items().get(0)).isEqualTo(mapper.toResponse(first));
+		assertThat(response.items().get(1)).isEqualTo(mapper.toResponse(second));
 	}
 
 	@Test
