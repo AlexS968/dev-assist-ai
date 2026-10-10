@@ -426,3 +426,9 @@ diagnostics. ADR-003 remains **Accepted**.
 ## V3 grounding contract
 
 The canonical `schemas/incident-analysis-v3.json` is used by both OpenAI strict JSON_SCHEMA and Ollama format schema. It requires a top-level `citationIds` array. A selected retrieval context is serialized as JSON in a separate user message; system rules treat Incident and source content as untrusted. The backend rejects unknown or duplicate IDs and resolves citation metadata only from selected sources. An empty citation list is valid and yields `grounded=false`. A semantic citation error may trigger the existing single repair attempt using the same context and IDs. Retrieval is never repeated during repair. See [ADR-008](../adr/ADR-008-grounded-incident-analysis.md).
+# Live RAG evaluation
+
+The optional [RAG evaluation harness](../evaluation/rag-evaluation.md) uses
+the existing v3 structured contract and repair policy. It is excluded from
+ordinary tests and CI. Its smoke result and citations are observations, not
+proof of factual correctness or complete prompt-injection protection.

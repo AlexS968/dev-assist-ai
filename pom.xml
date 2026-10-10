@@ -192,10 +192,30 @@
 				</configuration>
 			</plugin>
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<excludedGroups>live-rag</excludedGroups>
+				</configuration>
+			</plugin>
+			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>
+	<profiles>
+		<profile>
+			<id>rag-live-evaluation</id>
+			<build><plugins><plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<groups>live-rag</groups>
+					<excludedGroups/>
+				</configuration>
+			</plugin></plugins></build>
+		</profile>
+	</profiles>
 
 </project>

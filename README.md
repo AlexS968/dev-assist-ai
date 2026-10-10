@@ -486,3 +486,11 @@ Incident analysis now performs exact retrieval before generation when `RAG_ENABL
 ## License
 
 This project is licensed under the MIT License.
+# RAG evaluation
+
+Phase 4 includes a fictional test-only corpus and deterministic offline checks.
+The optional OpenAI/Ollama live evaluation is excluded from normal builds and
+CI. See [RAG evaluation](docs/evaluation/rag-evaluation.md) for prerequisites,
+metrics, threshold sweep, report format and explicit run commands. The
+production retrieval threshold remains 0.70 until evaluated on a broader
+corpus.

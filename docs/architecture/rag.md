@@ -73,3 +73,12 @@ Hibernate Vector 7.4.5 registers `cosine_distance` for PostgreSQL as pgvector `<
 ## Grounded Incident analysis
 
 When RAG is enabled and an Incident has an explicit KnowledgeBase, analysis retrieves profile-compatible chunks from that base before chat generation. The backend selects distinct chunks in retrieval order, up to `RAG_MAX_CONTEXT_CHUNKS=5` and `RAG_MAX_CONTEXT_CHARS=6000` UTF-16 content units. An oversized chunk is skipped without splitting; later chunks remain eligible. The selected content is untrusted JSON data in a separate user message. Documents are not system instructions. The model returns only source IDs; the backend validates those IDs against chunks actually sent and supplies citation metadata. Citations are source references, not proof that a document or analysis is correct. An empty citation list is allowed. Retrieval failure falls back to ordinary analysis with `RETRIEVAL_FAILED`; chat 502/504 behavior is unchanged. Retrieval may increase latency and cost, and embedding tokens are distinct from generation tokens. Analysis is not saved. The 0.70 similarity threshold still requires evaluation. See [ADR-008](../adr/ADR-008-grounded-incident-analysis.md).
+# Evaluation
+
+The Phase 4 evaluation corpus exists only in test resources and is ingested
+through the normal service. Offline tests exercise isolation and citation
+boundaries without model calls. An explicitly tagged live harness can compare
+OpenAI and Ollama retrieval, sweep thresholds from one embedding per query,
+and run one grounded incident smoke scenario. Reports are stored under
+`target/rag-evaluation/`; see [evaluation procedure](../evaluation/rag-evaluation.md).
+The 0.70 threshold remains an engineering default pending measured calibration.
