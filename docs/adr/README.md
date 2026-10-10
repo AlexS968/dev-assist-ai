@@ -25,3 +25,4 @@ risks.
 | [ADR-005](ADR-005-embedding-foundation.md) | Separate embedding providers and 768-dimensional profile | Accepted |
 | [ADR-006](ADR-006-exact-rag-retrieval.md) | Exact profile-isolated cosine retrieval | Accepted |
 | [ADR-007](ADR-007-incident-knowledge-base-association.md) | Explicit optional Incident–KnowledgeBase association | Accepted |
+| [ADR-008](ADR-008-grounded-incident-analysis.md) | Grounded Incident analysis and backend-validated citations | Accepted |

@@ -87,3 +87,8 @@ Content-Type: application/json
         client.assert(response.status === 400, "Expected 400 Bad Request");
     });
 %}
+
+### Analyze Incident with optional KnowledgeBase grounding
+POST {{baseUrl}}/api/v1/incidents/{{incidentId}}/analysis
+
+# Response includes groundingStatus, grounded, citations and retrieval metrics.

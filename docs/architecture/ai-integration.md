@@ -163,10 +163,10 @@ does not establish schema-validated structured output, which was absent at that 
 
 ## Versioned prompt contract
 
-`incident-analysis-v2` maps explicitly to these UTF-8 classpath resources:
+`incident-analysis-v3` maps explicitly to these UTF-8 classpath resources:
 
-- `prompts/incident-analysis/v2/system.st`
-- `prompts/incident-analysis/v2/user.st`
+- `prompts/incident-analysis/v3/system.st`
+- `prompts/incident-analysis/v3/user.st`
 
 The system message asks for at most three likely causes and four concrete
 investigation steps, uncertainty and evidence, with JSON-only output and no unsupported
@@ -181,7 +181,7 @@ new directory and explicitly register a new identifier, rather than rewriting v1
 
 | Application property | Environment variable | Default | Validation |
 |---|---|---|---|
-| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v2` | Nonblank, compatible version |
+| `app.ai.prompt-version` | `AI_PROMPT_VERSION` | `incident-analysis-v3` | Nonblank, compatible version |
 | `app.ai.max-output-tokens` | `AI_MAX_OUTPUT_TOKENS` | `1000` | Integer, 1–16384 |
 
 The 1000-token default allows room for JSON and reduces truncation risk compared with
@@ -265,7 +265,7 @@ live v2 tests below complete the integration acceptance evidence; ADR-003 is Acc
 ## Native structured output and validation
 
 The [structured contract](structured-incident-analysis.md) is now wired into both
-adapters and the REST response. The canonical `schemas/incident-analysis-v2.json`
+adapters and the REST response. The canonical `schemas/incident-analysis-v3.json`
 requires every property, restricts likelihood to LOW/MEDIUM/HIGH, and forbids unknown
 properties on each object. It intentionally leaves business limits to the application.
 OpenAI receives `ResponseFormat.JSON_SCHEMA` with that schema and `strict=true`;
@@ -282,7 +282,7 @@ Empty output, provider failures and 504 transport timeout behavior are preserved
 No regex fallback or SDK retry is introduced. The controlled policy below permits
 one additional request only after conversion/validation failure.
 
-Runtime startup accepts only v2; immutable v1 resources remain for historical evidence.
+Runtime startup accepts only v3; immutable v1 and v2 resources remain for historical evidence.
 System and user messages stay separate; only user messages contain incident data.
 The REST `content` field is removed atomically in favor of `analysis`; metadata and
 nullable usage semantics are unchanged. Swagger types are confined to REST DTOs.
@@ -353,7 +353,7 @@ and provider/empty failures retain the safe 502 response, and timeout retains 50
 No provider fallback or SDK/transport retries are enabled.
 
 The repair request reuses the original title/description, selected provider,
-canonical JSON Schema and `incident-analysis-v2`. The input carries a boolean repair
+canonical JSON Schema and the active prompt version. The input carries a boolean repair
 flag. The shared prompt builder appends a fixed system instruction stating that the
 previous response failed structural or semantic validation and requesting a new,
 complete schema-compliant JSON answer. Initial system/user templates are unchanged.
@@ -422,3 +422,7 @@ not establish a general provider ranking.
 Only the supplied metadata and qualitative observations are retained here: no full
 prompt, incident title/description, full model response, credentials or validation
 diagnostics. ADR-003 remains **Accepted**.
+
+## V3 grounding contract
+
+The canonical `schemas/incident-analysis-v3.json` is used by both OpenAI strict JSON_SCHEMA and Ollama format schema. It requires a top-level `citationIds` array. A selected retrieval context is serialized as JSON in a separate user message; system rules treat Incident and source content as untrusted. The backend rejects unknown or duplicate IDs and resolves citation metadata only from selected sources. An empty citation list is valid and yields `grounded=false`. A semantic citation error may trigger the existing single repair attempt using the same context and IDs. Retrieval is never repeated during repair. See [ADR-008](../adr/ADR-008-grounded-incident-analysis.md).

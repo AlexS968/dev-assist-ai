@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(properties = {"app.ai.provider=ollama", "app.rag.enabled=false",
         "app.rag.embedding.provider=unknown", "app.rag.embedding.dimensions=512",
         "app.rag.embedding.timeout=0s", "app.rag.embedding.batch-size=0",
-        "app.rag.embedding.max-chunks-per-run=0", "spring.ai.openai.api-key="})
+        "app.rag.embedding.max-chunks-per-run=0", "app.rag.grounding.max-context-chars=1",
+        "app.rag.grounding.max-chunks=99", "spring.ai.openai.api-key="})
 @Transactional
 class DisabledRagApplicationTests {
     @Container @ServiceConnection

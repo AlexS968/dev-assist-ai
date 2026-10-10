@@ -4,6 +4,7 @@ import dev.alexey.devassist.analysis.exception.IncidentAnalysisConversionExcepti
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisValidationException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
+import java.util.function.Consumer;
 
 /** Exactly one optional repair, using the same gateway. No transport retries or fallback. */
 public final class IncidentAnalysisRepairPolicy {
@@ -16,10 +17,15 @@ public final class IncidentAnalysisRepairPolicy {
 	}
 
 	public IncidentAnalysisResult analyze(IncidentAnalysisInput incident) {
+		return analyze(incident, result -> {});
+	}
+
+	public IncidentAnalysisResult analyze(IncidentAnalysisInput incident,
+			Consumer<IncidentAnalysisResult> semanticValidation) {
 		long started = nanoTime.getAsLong();
 		IncidentAnalysisAttemptUsage firstUsage;
 		try {
-			return gateway.analyze(new IncidentAnalysisInput(incident.title(), incident.description()));
+			return attempt(incident, semanticValidation);
 		}
 		catch (IncidentAnalysisConversionException exception) {
 			firstUsage = exception.usage();
@@ -28,13 +34,27 @@ public final class IncidentAnalysisRepairPolicy {
 			firstUsage = exception.usage();
 		}
 		// Outside the catch scope: any failure on this final attempt propagates unchanged.
-		var repaired = gateway.analyze(new IncidentAnalysisInput(incident.title(), incident.description(), true));
+		var repaired = attempt(new IncidentAnalysisInput(incident.title(), incident.description(), true,
+				incident.context()), semanticValidation);
 		long latencyMs = TimeUnit.NANOSECONDS.toMillis(nanoTime.getAsLong() - started);
 		return new IncidentAnalysisResult(repaired.analysis(), repaired.provider(), repaired.model(),
 				repaired.promptVersion(), repaired.generatedAt(), latencyMs,
 				sum(firstUsage.inputTokens(), repaired.inputTokens()),
 				sum(firstUsage.outputTokens(), repaired.outputTokens()),
 				sum(firstUsage.totalTokens(), repaired.totalTokens()), 2);
+	}
+
+	private IncidentAnalysisResult attempt(IncidentAnalysisInput input,
+			Consumer<IncidentAnalysisResult> validation) {
+		var result = gateway.analyze(input);
+		try {
+			validation.accept(result);
+		}
+		catch (IncidentAnalysisValidationException exception) {
+			throw new IncidentAnalysisValidationException(exception.violations(),
+					new IncidentAnalysisAttemptUsage(result.inputTokens(), result.outputTokens(), result.totalTokens()));
+		}
+		return result;
 	}
 
 	private static Integer sum(Integer first, Integer second) {

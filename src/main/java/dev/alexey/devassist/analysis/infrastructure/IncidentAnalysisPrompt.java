@@ -4,6 +4,7 @@ import dev.alexey.devassist.analysis.IncidentAnalysisInput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.core.io.ClassPathResource;
 
@@ -20,7 +21,7 @@ public final class IncidentAnalysisPrompt {
 
 	public IncidentAnalysisPrompt(String version) {
 		String directory = switch (version) {
-			case "incident-analysis-v2" -> "prompts/incident-analysis/v2/";
+			case "incident-analysis-v3" -> "prompts/incident-analysis/v3/";
 			default -> throw new IllegalArgumentException("Unsupported or incompatible incident analysis prompt version: " + version);
 		};
 		this.version = version;
@@ -44,7 +45,14 @@ public final class IncidentAnalysisPrompt {
 		return user.render(Map.of("title", incident.title(), "description", incident.description()));
 	}
 
-	private static String read(String path) {
+	public String grounding(IncidentAnalysisInput incident) {
+        var sources = incident.context().sources().stream()
+                .map(source -> Map.of("sourceId", source.sourceId(), "content", source.chunk().content()))
+                .toList();
+        return JsonMapper.shared().writeValueAsString(Map.of("sources", sources));
+    }
+
+    private static String read(String path) {
 		try {
 			return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8).strip();
 		}

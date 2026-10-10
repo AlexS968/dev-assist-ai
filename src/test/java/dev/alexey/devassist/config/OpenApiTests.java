@@ -85,6 +85,19 @@ class OpenApiTests {
 		}
 
 		assertStructuredSchemas(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.groundingStatus")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.groundingStatus.enum")
+                .value(containsInAnyOrder("RAG_DISABLED", "NO_KNOWLEDGE_BASE",
+                        "NO_RELEVANT_CONTEXT", "CONTEXT_PROVIDED", "RETRIEVAL_FAILED")).match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.grounded")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.citations")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.retrievalInputTokens")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisCitationDTO.properties.content")
+                .doesNotExist().match(result);
 
 		for (String schema : new String[]{"CreateIncidentRequestDTO", "IncidentResponseDTO",
 				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO", "IncidentAnalysisResponseDTO",

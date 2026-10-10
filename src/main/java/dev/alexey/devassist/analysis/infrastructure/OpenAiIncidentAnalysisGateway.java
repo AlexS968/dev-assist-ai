@@ -12,7 +12,7 @@ import java.net.SocketTimeoutException;
 import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
-import java.util.List;
+import java.util.ArrayList;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -52,7 +52,11 @@ public final class OpenAiIncidentAnalysisGateway implements IncidentAnalysisGate
 		long started = nanoTime.getAsLong();
 		ChatResponse response;
 		try {
-			var request = new Prompt(List.of(new SystemMessage(prompt.system(incident)), new UserMessage(prompt.user(incident))),
+			var messages = new ArrayList<org.springframework.ai.chat.messages.Message>();
+            messages.add(new SystemMessage(prompt.system(incident)));
+            messages.add(new UserMessage(prompt.user(incident)));
+            if (!incident.context().sources().isEmpty()) messages.add(new UserMessage(prompt.grounding(incident)));
+            var request = new Prompt(messages,
 					OpenAiChatOptions.builder().model(configuredModel).maxCompletionTokens(maxOutputTokens)
 						.responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_SCHEMA)
 								.jsonSchema(schema.json()).strict(true).build()).build());

@@ -80,7 +80,7 @@ It does not contain Maven, source code, or build tools.
 
 The following components are not implemented yet:
 
-- retrieval-augmented generation;
+- final RAG evaluation and calibration;
 - operational tools;
 - MCP;
 - agentic workflow;

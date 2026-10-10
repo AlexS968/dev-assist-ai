@@ -142,7 +142,7 @@ return 409 and 400.
 ## Incident analysis
 
 `POST /api/v1/incidents/{id}/analysis` takes an incident UUID and no request body.
-Only the stored title and description are sent to the AI gateway. A successful
+The stored title and description are sent to the AI gateway. When RAG applies, bounded retrieved sources are sent as a separate untrusted data message. A successful
 200 response has this shape (illustrative values):
 
 ```json
@@ -164,13 +164,22 @@ Only the stored title and description are sent to the AI gateway. A successful
   },
   "provider": "openai",
   "model": "gpt-6-luna",
-  "promptVersion": "incident-analysis-v2",
+  "promptVersion": "incident-analysis-v3",
   "generatedAt": "2026-09-27T12:00:00Z",
   "latencyMs": 1250,
   "attemptCount": 1,
   "inputTokens": 120,
   "outputTokens": 80,
-  "totalTokens": 200
+  "totalTokens": 200,
+  "groundingStatus": "RAG_DISABLED",
+  "grounded": false,
+  "knowledgeBaseId": null,
+  "citations": [],
+  "retrievalLatencyMs": 0,
+  "retrievalInputTokens": null,
+  "retrievedChunkCount": 0,
+  "providedContextChunkCount": 0,
+  "providedContextCharacters": 0
 }
 ```
 
@@ -227,7 +236,7 @@ Local defaults are provided for development:
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `OLLAMA_MODEL` | `qwen3:14b` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` |
-| `AI_PROMPT_VERSION` | `incident-analysis-v2` |
+| `AI_PROMPT_VERSION` | `incident-analysis-v3` |
 | `AI_MAX_OUTPUT_TOKENS` | `1000` |
 | `AI_TIMEOUT` | `20s` |
 | `RAG_ENABLED` | `false`; enables embedding runtime when `true` |
@@ -258,10 +267,10 @@ and a loopback base URL where required; Ollama contexts need no key at all.
 Endpoint tests replace the gateway and adapter tests mock the model/API. No OpenAI account
 or tokens are required for `./mvnw clean verify`.
 
-Prompts are loaded at startup from `prompts/incident-analysis/v2/system.st` and
+Prompts are loaded at startup from `prompts/incident-analysis/v3/system.st` and
 `user.st`. `app.ai.prompt-version` identifies the immutable template pair and is
-returned as `promptVersion`. Only `incident-analysis-v2` is compatible with the structured runtime;
-blank, unknown and v1 versions fail startup. The v1 resources are retained for history. New behavior requires a new version.
+returned as `promptVersion`. Only `incident-analysis-v3` is compatible with the structured runtime;
+blank, unknown, v1 and v2 versions fail startup. The v1 and v2 resources are retained for history. New behavior requires a new version.
 
 `app.ai.max-output-tokens` accepts 1–16384 tokens (an application guardrail, not a
 claim about every model's capacity). The adapters set OpenAI `maxCompletionTokens`
@@ -326,10 +335,10 @@ while Ollama embeddings use `OLLAMA_BASE_URL`. For local Ollama embeddings, run
 generate embeddings. See [RAG architecture](docs/architecture/rag.md)
 and [ADR-005](docs/adr/ADR-005-embedding-foundation.md). Exact retrieval is
 available through an explicit application service call when RAG is enabled;
-it has no public endpoint or Incident analysis integration. It embeds a query only when
+it has no public endpoint. Incident analysis uses it for explicitly linked bases. It embeds a query only when
 the selected KnowledgeBase has compatible vectors. Results are scoped to that
 base and the active provider/model/dimensions profile. Retrieved content is
-untrusted and is not passed to the LLM. See [ADR-006](docs/adr/ADR-006-exact-rag-retrieval.md).
+untrusted and is passed only as bounded data for eligible analysis. See [ADR-006](docs/adr/ADR-006-exact-rag-retrieval.md).
 
 A KnowledgeBase normally represents one project or service. Create an empty base with
 `POST /api/v1/knowledge-bases`; read it with `GET /api/v1/knowledge-bases/{id}` or list
@@ -421,7 +430,7 @@ There are no loops, background calls, sleep, SDK retries or provider fallback.
 
 The second call uses the original incident data and same canonical native schema,
 with a fixed shared repair instruction. No invalid model response or error diagnostics
-are sent back to the provider. The prompt version remains `incident-analysis-v2`.
+are sent back to the provider. The current prompt version is `incident-analysis-v3`.
 
 `attemptCount` is 1 or 2. First-success metrics are unchanged; repaired-success
 latency covers the whole orchestration. Each token field sums both attempts only if
@@ -443,11 +452,11 @@ prioritization, not probability or measured confidence. No `rootCause` is assert
 See the [structured contract](docs/architecture/structured-incident-analysis.md).
 
 - analysis is synchronous and results are not persisted;
-- successful v2 smoke tests, including the post-repair-policy happy path, establish integration evidence, not a benchmark or full evaluation;
+- successful earlier smoke tests, including the post-repair-policy happy path, establish integration evidence, not a benchmark or full evaluation;
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval and optional Incident association exist, but public upload API, automatic embedding, retrieval during analysis, grounding and citations are pending;
+- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval and optional Incident association exist, but public upload API, automatic embedding and final RAG evaluation are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;
@@ -469,6 +478,10 @@ fix/flyway-configuration
 ```
 
 `main` should remain in a buildable state.
+
+### Grounded analysis (Phase 4 step 7)
+
+Incident analysis now performs exact retrieval before generation when `RAG_ENABLED=true` and the Incident is linked to a KnowledgeBase. Selected untrusted chunks are bounded by `RAG_MAX_CONTEXT_CHUNKS=5` and `RAG_MAX_CONTEXT_CHARS=6000`. The v3 structured response requires citation IDs; the backend validates them against sources actually sent, then returns citation metadata and a grounding status. `grounded=true` means at least one valid source reference, not proven factual correctness. Empty retrieval or retrieval failure continues ordinary analysis without context; chat errors retain 502/504 behavior. Retrieval can increase latency and cost. Embedding token usage is separate from generation usage. Analysis is not persisted. The 0.70 threshold requires evaluation. See [ADR-008](docs/adr/ADR-008-grounded-incident-analysis.md).
 
 ## License
 

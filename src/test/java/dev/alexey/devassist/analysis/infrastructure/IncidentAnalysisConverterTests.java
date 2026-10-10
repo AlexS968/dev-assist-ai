@@ -55,7 +55,8 @@ class IncidentAnalysisConverterTests {
 				JSON.replace("\"order\": 1", "\"order\": 1.5"),
 				JSON.replace("\"order\": 1", "\"order\": null"),
 				JSON.replace("\"order\": 1", "\"order\": 2147483648"),
-				JSON.replace("\"summary\":", "\"summary\": \"PRIVATE\", \"summary\":"));
+				JSON.replace("\"summary\":", "\"summary\": \"PRIVATE\", \"summary\":"),
+                JSON.replace("\"citationIds\":", "\"citationIds\": [], \"citationIds\":"));
 	}
 
 	@ParameterizedTest
@@ -65,7 +66,7 @@ class IncidentAnalysisConverterTests {
 	}
 
 	static Stream<String> missingOrNullFields() {
-		return Stream.of("/summary", "/probableCauses", "/investigationSteps", "/uncertainties",
+		return Stream.of("/summary", "/probableCauses", "/investigationSteps", "/uncertainties", "/citationIds",
 				"/probableCauses/0/title", "/probableCauses/0/explanation", "/probableCauses/0/likelihood",
 				"/probableCauses/0/evidenceToCheck", "/investigationSteps/0/order", "/investigationSteps/0/action",
 				"/investigationSteps/0/rationale").flatMap(path -> {
@@ -93,6 +94,7 @@ class IncidentAnalysisConverterTests {
 				JSON.replace("\"order\": 1", "\"order\": 0"),
 				JSON.replace("Metrics are unavailable", "x".repeat(251)),
 				JSON.replace("[\"Check active connections\"]", "[]"),
-				JSON.replace("[\"Check active connections\"]", "[null]"));
+				JSON.replace("[\"Check active connections\"]", "[null]"),
+                JSON.replace("\"citationIds\": []", "\"citationIds\": [\"S1\", \"S1\"]"));
 	}
 }

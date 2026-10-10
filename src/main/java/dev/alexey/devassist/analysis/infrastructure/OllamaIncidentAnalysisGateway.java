@@ -9,7 +9,7 @@ import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
 import java.net.SocketTimeoutException;
 import java.time.Clock;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 import org.springframework.ai.ollama.api.OllamaApi;
@@ -41,9 +41,14 @@ public final class OllamaIncidentAnalysisGateway implements IncidentAnalysisGate
 	@Override
 	public IncidentAnalysisResult analyze(IncidentAnalysisInput incident) {
 		var options = OllamaChatOptions.builder().numPredict(properties.maxOutputTokens()).disableThinking().build();
-		var request = OllamaApi.ChatRequest.builder(properties.ollamaModel()).stream(false)
-				.messages(List.of(OllamaApi.Message.builder(OllamaApi.Message.Role.SYSTEM).content(prompt.system(incident)).build(),
-						OllamaApi.Message.builder(OllamaApi.Message.Role.USER).content(prompt.user(incident)).build()))
+		var messages = new ArrayList<OllamaApi.Message>();
+        messages.add(OllamaApi.Message.builder(OllamaApi.Message.Role.SYSTEM).content(prompt.system(incident)).build());
+        messages.add(OllamaApi.Message.builder(OllamaApi.Message.Role.USER).content(prompt.user(incident)).build());
+        if (!incident.context().sources().isEmpty()) {
+            messages.add(OllamaApi.Message.builder(OllamaApi.Message.Role.USER).content(prompt.grounding(incident)).build());
+        }
+        var request = OllamaApi.ChatRequest.builder(properties.ollamaModel()).stream(false)
+                .messages(messages)
 				.options(options).think(options.getThinkOption()).format(schema.asMap()).build();
 		long started = nanoTime.getAsLong();
 		OllamaApi.ChatResponse response;

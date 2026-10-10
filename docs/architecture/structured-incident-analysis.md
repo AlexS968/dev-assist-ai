@@ -1,7 +1,7 @@
 # Phase 3: structured incident analysis contract
 
 Both adapters now request native structured output using one canonical resource,
-`schemas/incident-analysis-v2.json`. The gateway result and REST response carry
+`schemas/incident-analysis-v3.json`. The gateway result and REST response carry
 `analysis` plus provider/model/promptVersion/timing/nullable token metadata and
 `attemptCount` (1 for initial success, 2 after successful repair).
 The old plain-text `content` field is removed. Controller still delegates only to
@@ -105,7 +105,7 @@ transport timeouts remain 504 and unknown incident IDs remain 404. No new loggin
 of responses, incident data or prompts is introduced. Empty output retains its
 existing safe empty-response exception and 502 mapping.
 
-Only `incident-analysis-v2` is accepted at startup; v1 resources are preserved but
+Only `incident-analysis-v3` is accepted at startup; v1 resources are preserved but
 incompatible with this runtime. System/user roles remain separate. Incident data
 appears only in the user message. The prompt requests concise findings, not internal
 reasoning traces. The default output budget rises from 450 to 1000 tokens, reducing
@@ -137,7 +137,7 @@ triggers the second attempt; success, unknown incident, empty output, timeout an
 provider/transport failures do not. Any second failure is final. No configurable
 retry count, recursion, loops or provider fallback is used.
 
-Both calls use the same original incident data, v2 prompt version and canonical
+Both calls use the same original incident data, v3 prompt version, selected context and canonical
 native schema. A repair flag adds one shared fixed instruction asking for a complete
 schema-compliant replacement, without raw output, exception text or diagnostics.
 Adapters preserve only nullable token counts in a safe internal attempt-usage record
@@ -176,3 +176,7 @@ belong in future evaluation and do not indicate a structured-output mechanism er
 One run of each provider is not a benchmark. No full prompts, incident title/description,
 full responses, credentials or validation diagnostics are retained. ADR-003 remains
 **Accepted**; see the [smoke-test record](ai-integration.md#live-smoke-tests-after-the-repair-policy).
+
+## Citation IDs
+
+V3 adds a required, possibly empty `citationIds` array. IDs refer only to backend-assigned sources actually supplied to the chat model. Citation metadata is resolved by the backend and is not accepted from model output. A citation does not prove factual correctness.

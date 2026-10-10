@@ -24,7 +24,8 @@ public final class StructuredAnalysisFixtures {
 			    "action": "Inspect metrics",
 			    "rationale": "Test the hypothesis"
 			  }],
-			  "uncertainties": ["Metrics are unavailable"]
+			  "uncertainties": ["Metrics are unavailable"],
+              "citationIds": []
 			}
 			""";
 
