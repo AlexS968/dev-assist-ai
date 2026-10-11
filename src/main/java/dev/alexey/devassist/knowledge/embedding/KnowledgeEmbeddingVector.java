@@ -1,5 +1,7 @@
 package dev.alexey.devassist.knowledge.embedding;
 
+import java.util.Arrays;
+
 public record KnowledgeEmbeddingVector(float[] values) {
     public KnowledgeEmbeddingVector {
         if (values == null || values.length != 768) {
@@ -35,5 +37,22 @@ public record KnowledgeEmbeddingVector(float[] values) {
     @Override
     public float[] values() {
         return values.clone();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof KnowledgeEmbeddingVector vector
+                && Arrays.equals(values, vector.values);
+    }
+
+    @Override
+    public int hashCode() {
+        return Arrays.hashCode(values);
+    }
+
+    @Override
+    public String toString() {
+        return "KnowledgeEmbeddingVector[dimensions=" + values.length
+                + ", contentHash=" + Integer.toHexString(hashCode()) + "]";
     }
 }

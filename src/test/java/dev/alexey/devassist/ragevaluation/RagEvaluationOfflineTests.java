@@ -47,8 +47,8 @@ class RagEvaluationOfflineTests {
         for (RagEvaluationScenario scenario : RagEvaluationCorpus.SCENARIOS) {
             assertThat(ids.add(scenario.scenarioId())).isTrue();
             assertThat(RagEvaluationCorpus.DOCUMENTS).containsKey(scenario.knowledgeBaseKey());
-            assertThat(externalIds).containsAll(scenario.expectedRelevantExternalIds());
-            assertThat(externalIds).containsAll(scenario.forbiddenExternalIds());
+            assertThat(scenario.expectedRelevantExternalIds()).isSubsetOf(externalIds);
+            assertThat(scenario.forbiddenExternalIds()).isSubsetOf(externalIds);
             assertThat(scenario.expectedRelevantExternalIds())
                     .doesNotContainAnyElementsOf(scenario.forbiddenExternalIds());
         }
@@ -100,7 +100,8 @@ class RagEvaluationOfflineTests {
         assertThat(context.sources()).extracting(source -> source.chunk().externalId())
                 .containsExactly("payment-untrusted-note", "payment-pool-runbook");
         assertThat(context.characterCount()).isLessThanOrEqualTo(60);
-        assertThatThrownBy(() -> context.sources().clear()).isInstanceOf(UnsupportedOperationException.class);
+        var immutableSources = context.sources();
+        assertThatThrownBy(immutableSources::clear).isInstanceOf(UnsupportedOperationException.class);
         var resolver = new IncidentAnalysisCitationResolver();
         var valid = analysis(List.of("S2"));
         assertThat(resolver.resolve(valid, context, payment)).extracting(citation -> citation.externalId())

@@ -60,7 +60,7 @@ class KnowledgeDocumentChunkerTests {
     @Test void headingLikeCodeLineDoesNotBecomeSectionBoundary() {
         String content = "# Real\n```text\n# Not a heading\n```\n" + "text ".repeat(60);
         List<KnowledgeDocumentChunk> result = chunks(content, 200, 0);
-        assertThat(result).allSatisfy(piece ->
+        assertThat(result).isNotEmpty().allSatisfy(piece ->
                 assertThat(piece.metadata()).containsEntry("sectionHeading", "# Real"));
     }
 

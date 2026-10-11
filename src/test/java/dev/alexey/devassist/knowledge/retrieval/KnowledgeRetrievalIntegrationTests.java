@@ -101,9 +101,11 @@ class KnowledgeRetrievalIntegrationTests {
         assertThat(found.sourceType()).isEqualTo(KnowledgeSourceType.RUNBOOK);
         assertThat(found.sourceUri()).isNull();
         assertThat(found.metadata()).containsEntry("section", "one");
-        assertThatThrownBy(() -> found.metadata().put("x", "y"))
+        Map<String, String> metadata = found.metadata();
+        assertThatThrownBy(() -> metadata.put("x", "y"))
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> result.matches().clear())
+        var immutableMatches = result.matches();
+        assertThatThrownBy(immutableMatches::clear)
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(result.inputTokens()).isEqualTo(3);
         assertThat(result.embeddingLatencyMs()).isEqualTo(2);

@@ -5,7 +5,6 @@ import dev.alexey.devassist.knowledge.embedding.EmbeddingPurpose;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingGateway;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingRequest;
 import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingResult;
-import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingVector;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingException;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingResponseException;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingTimeoutException;
@@ -75,14 +74,17 @@ class KnowledgeEmbeddingGatewayTests {
             float[] exposed = result.vectors().getFirst().values();
             exposed[0] = 99f;
             assertThat(result.vectors().getFirst().values()[0]).isEqualTo(0.1f);
-            assertThatThrownBy(() -> result.vectors().clear()).isInstanceOf(UnsupportedOperationException.class);
+            List<?> immutableVectors = result.vectors();
+            assertThatThrownBy(immutableVectors::clear).isInstanceOf(UnsupportedOperationException.class);
         }
     }
 
     @Test void rejectsMissingAndBlankInputBeforeProviderCall() {
-        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of(), EmbeddingPurpose.DOCUMENT))
+        List<String> emptyInput = List.of();
+        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(emptyInput, EmbeddingPurpose.DOCUMENT))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(List.of(" "), EmbeddingPurpose.DOCUMENT))
+        List<String> blankInput = List.of(" ");
+        assertThatThrownBy(() -> new KnowledgeEmbeddingRequest(blankInput, EmbeddingPurpose.DOCUMENT))
                 .isInstanceOf(IllegalArgumentException.class);
         KnowledgeEmbeddingGateway gateway = gateway("openai");
         assertThatThrownBy(() -> gateway.embed(null)).isInstanceOf(IllegalArgumentException.class);
@@ -98,6 +100,16 @@ class KnowledgeEmbeddingGatewayTests {
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(
                 new Embedding(vector(1f), 1), new Embedding(vector(2f), 0))));
+        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(null));
+        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
+        List<Embedding> withNull = new ArrayList<>();
+        withNull.add(null);
+        withNull.add(new Embedding(vector(1f), 1));
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(withNull));
+        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(
+                new Embedding(vector(1f), null), new Embedding(vector(2f), 1))));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
     }
 
@@ -136,6 +148,18 @@ class KnowledgeEmbeddingGatewayTests {
         KnowledgeEmbeddingResult result = gateway("ollama").embed(new KnowledgeEmbeddingRequest(List.of("text"), EmbeddingPurpose.DOCUMENT));
         assertThat(result.model()).isEqualTo("configured-model");
         assertThat(result.inputTokens()).isNull();
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(
+                List.of(new Embedding(vector(1f), 0)), null));
+        KnowledgeEmbeddingResult withoutMetadata = gateway("ollama").embed(
+                new KnowledgeEmbeddingRequest(List.of("text"), EmbeddingPurpose.DOCUMENT));
+        assertThat(withoutMetadata.model()).isEqualTo("configured-model");
+        assertThat(withoutMetadata.inputTokens()).isNull();
+        when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(
+                List.of(new Embedding(vector(1f), 0)), new EmbeddingResponseMetadata(null, null)));
+        KnowledgeEmbeddingResult withNullFields = gateway("openai").embed(
+                new KnowledgeEmbeddingRequest(List.of("text"), EmbeddingPurpose.DOCUMENT));
+        assertThat(withNullFields.model()).isEqualTo("configured-model");
+        assertThat(withNullFields.inputTokens()).isNull();
     }
 
     @Test void ollamaZeroUsageIsReportedAsUnknown() {

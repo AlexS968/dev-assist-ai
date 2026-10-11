@@ -35,11 +35,16 @@ public class IncidentService {
 
 	@Transactional
 	public IncidentResponseDTO create(String title, String description, IncidentSource source) {
-		return create(title, description, source, null);
+		return createIncident(title, description, source, null);
 	}
 
 	@Transactional
 	public IncidentResponseDTO create(String title, String description, IncidentSource source, UUID knowledgeBaseId) {
+		return createIncident(title, description, source, knowledgeBaseId);
+	}
+
+	private IncidentResponseDTO createIncident(String title, String description, IncidentSource source,
+			UUID knowledgeBaseId) {
 		Incident incident = new Incident(title, description, source);
 		if (knowledgeBaseId != null) incident.assignKnowledgeBase(knowledgeBases.requireEntity(knowledgeBaseId));
 		return mapper.toResponse(repository.save(incident));

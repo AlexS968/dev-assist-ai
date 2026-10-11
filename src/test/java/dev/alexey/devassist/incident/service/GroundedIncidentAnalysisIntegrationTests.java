@@ -102,7 +102,10 @@ class GroundedIncidentAnalysisIntegrationTests {
             IncidentAnalysisInput input = invocation.getArgument(0);
             assertThat(input.context().sources()).hasSize(1);
             assertThat(input.context().sources().getFirst().sourceId()).isEqualTo("S1");
-            var ids = calls.getAndIncrement() == 0 ? List.of("S999") : List.of("S1");
+            int attempt = calls.getAndIncrement();
+            List<String> ids;
+            if (attempt == 0) ids = List.of("S999");
+            else ids = List.of("S1");
             var original = analysis();
             var cited = new StructuredIncidentAnalysis(original.summary(), original.probableCauses(),
                     original.investigationSteps(), original.uncertainties(), ids);
@@ -111,10 +114,18 @@ class GroundedIncidentAnalysisIntegrationTests {
         });
         var response = mvc.perform(post("/api/v1/incidents/{id}/analysis", incidentId))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertGroundedResponse(response, base.getId(), chunkId);
+        verify(embedding, times(1)).embed(any());
+        verify(chat, times(2)).analyze(any());
+        assertDatabaseUnchanged(incidentId, createdAt, updatedAt, base.getId(),
+                documentCount, chunkCount, chunkId);
+    }
+
+    private void assertGroundedResponse(String response, UUID baseId, UUID chunkId) {
         var json = tools.jackson.databind.json.JsonMapper.shared().readTree(response);
         assertThat(json.path("groundingStatus").asString()).isEqualTo("CONTEXT_PROVIDED");
         assertThat(json.path("grounded").asBoolean()).isTrue();
-        assertThat(json.path("knowledgeBaseId").asString()).isEqualTo(base.getId().toString());
+        assertThat(json.path("knowledgeBaseId").asString()).isEqualTo(baseId.toString());
         assertThat(json.at("/citations/0/chunkId").asString()).isEqualTo(chunkId.toString());
         assertThat(json.at("/citations/0/documentTitle").asString()).isEqualTo("Runbook");
         assertThat(json.path("attemptCount").asInt()).isEqualTo(2);
@@ -126,12 +137,14 @@ class GroundedIncidentAnalysisIntegrationTests {
         assertThat(json.path("providedContextCharacters").asInt()).isEqualTo(8);
         assertThat(json.path("retrievalLatencyMs").asLong()).isGreaterThanOrEqualTo(0);
         assertThat(response).doesNotContain("Evidence", "embedding", "vector");
-        verify(embedding, times(1)).embed(any());
-        verify(chat, times(2)).analyze(any());
+    }
+
+    private void assertDatabaseUnchanged(UUID incidentId, Instant createdAt, Instant updatedAt,
+            UUID baseId, long documentCount, long chunkCount, UUID chunkId) {
         var after = incidents.findById(incidentId).orElseThrow();
         assertThat(after.getCreatedAt()).isEqualTo(createdAt);
         assertThat(after.getUpdatedAt()).isEqualTo(updatedAt);
-        assertThat(after.getKnowledgeBase().getId()).isEqualTo(base.getId());
+        assertThat(after.getKnowledgeBase().getId()).isEqualTo(baseId);
         assertThat(documents.count()).isEqualTo(documentCount);
         assertThat(chunks.count()).isEqualTo(chunkCount);
         assertThat(chunks.findById(chunkId).orElseThrow().getContent()).isEqualTo("Evidence");

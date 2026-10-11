@@ -13,9 +13,10 @@ public final class IncidentAnalysisContextSelector {
         int used = 0;
         for (RetrievedKnowledgeChunk chunk : retrieved) {
             if (selected.size() == maxChunks) break;
-            if (!seen.add(chunk.chunkId()) || chunk.content().length() > maxChars - used) continue;
-            selected.add(new IncidentAnalysisSource("S" + (selected.size() + 1), chunk));
-            used += chunk.content().length();
+            if (seen.add(chunk.chunkId()) && chunk.content().length() <= maxChars - used) {
+                selected.add(new IncidentAnalysisSource("S" + (selected.size() + 1), chunk));
+                used += chunk.content().length();
+            }
         }
         return new IncidentAnalysisContext(selected, used);
     }

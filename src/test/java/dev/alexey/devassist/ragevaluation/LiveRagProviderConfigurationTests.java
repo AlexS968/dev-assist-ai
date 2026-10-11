@@ -24,7 +24,8 @@ class LiveRagProviderConfigurationTests {
     }
 
     @Test void openaiRequiresKeyWithoutExposingIt() {
-        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(Map.of("RAG_LIVE_PROVIDER", "openai")))
+        Map<String, String> missingKey = Map.of("RAG_LIVE_PROVIDER", "openai");
+        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(missingKey))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("OPENAI_API_KEY");
         String secret = "test-secret-never-log";
         Logger logger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -37,7 +38,7 @@ class LiveRagProviderConfigurationTests {
             assertThat(properties).containsEntry("app.ai.provider", "openai")
                     .containsEntry("app.rag.embedding.provider", "openai")
                     .containsEntry("spring.ai.openai.base-url", LiveRagProviderConfiguration.OPENAI_BASE_URL);
-            assertThat(secret.equals(properties.get("spring.ai.openai.api-key"))).isTrue();
+            assertThat(properties.get("spring.ai.openai.api-key")).isEqualTo(secret);
             assertThat(appender.list).noneMatch(event -> event.getFormattedMessage().contains(secret));
         } finally {
             logger.detachAppender(appender);
@@ -50,7 +51,7 @@ class LiveRagProviderConfigurationTests {
         Map<String, Object> registered = new HashMap<>();
         LiveRagProviderConfiguration.register(Map.of("RAG_LIVE_PROVIDER", "openai",
                 "OPENAI_API_KEY", secret), (name, supplier) -> registered.put(name, supplier.get()));
-        assertThat(secret.equals(registered.get("spring.ai.openai.api-key"))).isTrue();
+        assertThat(registered.get("spring.ai.openai.api-key")).isEqualTo(secret);
         assertThat(registered.get("spring.ai.openai.base-url"))
                 .isEqualTo("https://api.openai.com/v1")
                 .isNotEqualTo("http://127.0.0.1:1");
@@ -61,16 +62,18 @@ class LiveRagProviderConfigurationTests {
         var properties = new EmbeddingProperties("openai", "text-embedding-3-small",
                 "nomic-embed-text", 768, Duration.ofSeconds(60), 32, 500);
         var options = LiveOpenAiEmbeddingOptionsConfiguration.options(properties, secret);
-        assertThat(secret.equals(options.getApiKey())).isTrue();
+        assertThat(options.getApiKey()).isEqualTo(secret);
         assertThat(options.getBaseUrl()).isEqualTo(LiveRagProviderConfiguration.OPENAI_BASE_URL);
         assertThat(options.getModel()).isEqualTo("text-embedding-3-small");
         assertThat(options.getMaxRetries()).isZero();
     }
 
     @Test void missingAndUnknownSelectorsFailSafely() {
-        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(Map.of()))
+        Map<String, String> missingSelector = Map.of();
+        Map<String, String> unknownSelector = Map.of("RAG_LIVE_PROVIDER", "auto");
+        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(missingSelector))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("RAG_LIVE_PROVIDER");
-        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(Map.of("RAG_LIVE_PROVIDER", "auto")))
+        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(unknownSelector))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Unsupported");
     }
 
@@ -80,8 +83,9 @@ class LiveRagProviderConfigurationTests {
                 "RAG_EMBEDDING_TIMEOUT", "80s"));
         assertThat(properties).containsEntry("app.ai.timeout", "75s")
                 .containsEntry("app.rag.embedding.timeout", "80s");
-        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(Map.of(
-                "RAG_LIVE_PROVIDER", "ollama", "RAG_EMBEDDING_DIMENSIONS", "384")))
+        Map<String, String> wrongDimensions = Map.of(
+                "RAG_LIVE_PROVIDER", "ollama", "RAG_EMBEDDING_DIMENSIONS", "384");
+        assertThatThrownBy(() -> LiveRagProviderConfiguration.resolve(wrongDimensions))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("768");
     }
 }

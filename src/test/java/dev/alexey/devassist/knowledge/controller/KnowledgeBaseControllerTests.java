@@ -108,6 +108,16 @@ class KnowledgeBaseControllerTests {
         assertThat(bases.count()).isZero();
     }
 
+    @Test void keyAcceptsSingleCharacterInternalHyphensAndMaximumLength() throws Exception {
+        String path = "/api/v1/knowledge-bases";
+        for (String key : new String[]{"a", "a--b", "a" + "-".repeat(98) + "b"}) {
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"key\":\"" + key + "\",\"name\":\"Name\"}"))
+                    .andExpect(status().isCreated());
+        }
+        assertThat(bases.count()).isEqualTo(3);
+    }
+
     @Test void unknownBaseReturns404() throws Exception {
         mvc.perform(get("/api/v1/knowledge-bases/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound())

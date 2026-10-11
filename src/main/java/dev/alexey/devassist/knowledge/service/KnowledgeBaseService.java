@@ -38,7 +38,7 @@ public class KnowledgeBaseService {
 
     @Transactional(readOnly = true)
     public KnowledgeBaseResponseDTO findById(UUID id) {
-        return mapper.toResponse(requireEntity(id));
+        return mapper.toResponse(loadRequired(id));
     }
 
     @Transactional(readOnly = true)
@@ -49,6 +49,10 @@ public class KnowledgeBaseService {
 
     @Transactional(readOnly = true)
     public KnowledgeBase requireEntity(UUID id) {
+        return loadRequired(id);
+    }
+
+    private KnowledgeBase loadRequired(UUID id) {
         return repository.findById(id).orElseThrow(() -> new KnowledgeBaseNotFoundException(id));
     }
 }

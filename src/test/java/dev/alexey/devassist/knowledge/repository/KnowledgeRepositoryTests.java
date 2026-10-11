@@ -161,16 +161,18 @@ class KnowledgeRepositoryTests {
 
     @Test void databaseRejectsPartialEmbeddingState() {
         KnowledgeChunk chunk = chunk(document(base("payments"), "partial"), 0, Map.of());
+        var chunkId = chunk.getId();
         assertThatThrownBy(() -> jdbc.update("UPDATE knowledge_chunks SET embedding_provider = ? WHERE id = ?",
-                "openai", chunk.getId())).isInstanceOf(DataIntegrityViolationException.class);
+                "openai", chunkId)).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test void databaseRejectsOtherEmbeddingDimensions() {
         KnowledgeChunk chunk = chunk(document(base("payments"), "dimension"), 0, Map.of());
         chunk.setEmbedding(vector(), new EmbeddingProfile("openai", "text-embedding-3-small", 768), Instant.now());
         chunks.flush();
+        var chunkId = chunk.getId();
         assertThatThrownBy(() -> jdbc.update("UPDATE knowledge_chunks SET embedding_dimensions = ? WHERE id = ?",
-                512, chunk.getId())).isInstanceOf(DataIntegrityViolationException.class);
+                512, chunkId)).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test void embeddingsRemainScopedToTheirKnowledgeBase() {

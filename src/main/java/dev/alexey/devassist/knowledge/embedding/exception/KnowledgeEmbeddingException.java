@@ -1,6 +1,9 @@
 package dev.alexey.devassist.knowledge.embedding.exception;
 
+import java.io.Serial;
+
 public class KnowledgeEmbeddingException extends RuntimeException {
+    @Serial private static final long serialVersionUID = 1L;
     private final KnowledgeEmbeddingDiagnostic diagnostic;
 
     public KnowledgeEmbeddingException(String message) {

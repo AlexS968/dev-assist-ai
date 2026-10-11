@@ -42,7 +42,7 @@ class KnowledgeEmbeddingOrchestratorTests {
         List<KnowledgeEmbeddingVector> vectors = new ArrayList<>();
         for (int index = 0; index < request.texts().size(); index++) {
             float[] values = new float[768];
-            Arrays.fill(values, index + 1);
+            Arrays.fill(values, (float) (index + 1));
             vectors.add(new KnowledgeEmbeddingVector(values));
         }
         return new KnowledgeEmbeddingResult(vectors, profile.provider(), profile.model(), 768,
@@ -92,7 +92,8 @@ class KnowledgeEmbeddingOrchestratorTests {
     }
 
     @Test void unknownBaseFailsBeforeProvider() {
-        assertThatThrownBy(() -> orchestrator(2, 3).embedKnowledgeBase(baseId))
+        KnowledgeEmbeddingOrchestrator service = orchestrator(2, 3);
+        assertThatThrownBy(() -> service.embedKnowledgeBase(baseId))
                 .isInstanceOf(KnowledgeBaseNotFoundException.class);
         verifyNoInteractions(gateway, writer, chunks);
     }

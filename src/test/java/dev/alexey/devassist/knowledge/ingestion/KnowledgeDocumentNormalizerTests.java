@@ -22,4 +22,11 @@ class KnowledgeDocumentNormalizerTests {
         assertThatThrownBy(() -> normalizer.normalize(" \n\t\n"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test void longLineTrimsOnlyTrailingSpacesAndTabsOutsideFence() {
+        String longLine = "a".repeat(100_000);
+        String input = longLine + " \t\t\n```text  \n" + longLine + " \t\n```\nTail \t";
+        assertThat(normalizer.normalize(input)).isEqualTo(
+                longLine + "\n```text\n" + longLine + " \t\n```\nTail");
+    }
 }

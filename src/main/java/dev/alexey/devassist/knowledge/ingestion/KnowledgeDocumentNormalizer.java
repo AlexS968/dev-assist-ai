@@ -10,24 +10,12 @@ public class KnowledgeDocumentNormalizer {
                 Normalizer.Form.NFC);
         String[] lines = input.split("\n", -1);
         StringBuilder output = new StringBuilder();
-        boolean fenced = false;
-        char fenceMarker = 0;
-        int fenceLength = 0;
+        FenceState fence = new FenceState();
         int emptyRun = 0;
         for (String line : lines) {
-            String clean = fenced ? line : line.replaceFirst("[ \t]+$", "");
-            String trimmed = clean.stripLeading();
-            int run = fenceRun(trimmed);
-            if (run >= 3 && (!fenced || trimmed.charAt(0) == fenceMarker && run >= fenceLength)) {
-                if (fenced) {
-                    fenced = false;
-                } else {
-                    fenced = true;
-                    fenceMarker = trimmed.charAt(0);
-                    fenceLength = run;
-                }
-            }
-            if (!fenced && clean.isEmpty()) {
+            String clean = fence.active ? line : stripTrailingHorizontalWhitespace(line);
+            fence.accept(clean.stripLeading());
+            if (!fence.active && clean.isEmpty()) {
                 emptyRun++;
                 continue;
             }
@@ -44,10 +32,34 @@ public class KnowledgeDocumentNormalizer {
         return normalized;
     }
 
+    private String stripTrailingHorizontalWhitespace(String line) {
+        int end = line.length();
+        while (end > 0 && (line.charAt(end - 1) == ' ' || line.charAt(end - 1) == '\t')) end--;
+        return end == line.length() ? line : line.substring(0, end);
+    }
+
     private int fenceRun(String line) {
         if (line.isEmpty() || (line.charAt(0) != '`' && line.charAt(0) != '~')) return 0;
         int index = 0;
         while (index < line.length() && line.charAt(index) == line.charAt(0)) index++;
         return index;
+    }
+
+    private final class FenceState {
+        private boolean active;
+        private char marker;
+        private int length;
+
+        private void accept(String line) {
+            int run = fenceRun(line);
+            if (run < 3) return;
+            if (active) {
+                if (line.charAt(0) == marker && run >= length) active = false;
+            } else {
+                active = true;
+                marker = line.charAt(0);
+                length = run;
+            }
+        }
     }
 }

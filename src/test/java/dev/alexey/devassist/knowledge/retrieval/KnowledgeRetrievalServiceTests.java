@@ -52,7 +52,8 @@ class KnowledgeRetrievalServiceTests {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageNotContaining("secret");
         assertThatThrownBy(() -> new KnowledgeRetrievalRequest(baseId, " ", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new KnowledgeRetrievalRequest(baseId, "x".repeat(10001), null, null))
+        String longQuery = "x".repeat(10001);
+        assertThatThrownBy(() -> new KnowledgeRetrievalRequest(baseId, longQuery, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> request(0, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> request(null, Double.NaN)).isInstanceOf(IllegalArgumentException.class);
@@ -61,7 +62,8 @@ class KnowledgeRetrievalServiceTests {
 
     @Test void missingBaseStopsBeforeProviderAndSearch() {
         KnowledgeRetrievalService retrieval = service();
-        assertThatThrownBy(() -> retrieval.retrieve(request(null, null)))
+        KnowledgeRetrievalRequest query = request(null, null);
+        assertThatThrownBy(() -> retrieval.retrieve(query))
                 .isInstanceOf(KnowledgeBaseNotFoundException.class);
         verifyNoInteractions(gateway, search);
     }
@@ -101,7 +103,8 @@ class KnowledgeRetrievalServiceTests {
         service().retrieve(request(null, null));
         verify(search).search(eq(baseId), eq(profile), any(float[].class), eq(5), eq(0.70));
         KnowledgeRetrievalService retrieval = service();
-        assertThatThrownBy(() -> retrieval.retrieve(request(21, null)))
+        KnowledgeRetrievalRequest excessiveTopK = request(21, null);
+        assertThatThrownBy(() -> retrieval.retrieve(excessiveTopK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -122,14 +125,15 @@ class KnowledgeRetrievalServiceTests {
         when(bases.existsById(baseId)).thenReturn(true);
         when(search.hasCompatibleEmbeddings(baseId, profile)).thenReturn(true);
         KnowledgeRetrievalService retrieval = service();
+        KnowledgeRetrievalRequest query = request(null, null);
         when(gateway.embed(any())).thenThrow(new KnowledgeEmbeddingTimeoutException());
-        assertThatThrownBy(() -> retrieval.retrieve(request(null, null)))
+        assertThatThrownBy(() -> retrieval.retrieve(query))
                 .isInstanceOf(KnowledgeEmbeddingTimeoutException.class);
         doReturn(response("ollama", "nomic", 2)).when(gateway).embed(any());
-        assertThatThrownBy(() -> retrieval.retrieve(request(null, null)))
+        assertThatThrownBy(() -> retrieval.retrieve(query))
                 .isInstanceOf(KnowledgeEmbeddingResponseException.class);
         doReturn(response("openai", "nomic", 1)).when(gateway).embed(any());
-        assertThatThrownBy(() -> retrieval.retrieve(request(null, null)))
+        assertThatThrownBy(() -> retrieval.retrieve(query))
                 .isInstanceOf(KnowledgeEmbeddingResponseException.class);
         verify(search, never()).search(any(), any(), any(), anyInt(), anyDouble());
     }
@@ -142,8 +146,10 @@ class KnowledgeRetrievalServiceTests {
         var result = new KnowledgeRetrievalResult(baseId, profile, mutable, 1, 2, 3, 4);
         mutable.clear();
         assertThat(result.matches()).hasSize(1);
-        assertThatThrownBy(() -> result.matches().clear()).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> match.metadata().put("x", "y"))
+        List<RetrievedKnowledgeChunk> immutableMatches = result.matches();
+        assertThatThrownBy(immutableMatches::clear).isInstanceOf(UnsupportedOperationException.class);
+        Map<String, String> immutableMetadata = match.metadata();
+        assertThatThrownBy(() -> immutableMetadata.put("x", "y"))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 

@@ -20,16 +20,16 @@ class LiveRagFailureReportTests {
         var fields = LiveRagFailureReport.fields(failure, "openai", "embedding");
         String json = JsonMapper.shared().writeValueAsString(fields);
         assertThat(json).contains("\"provider\":\"openai\"", "\"stage\":\"embedding\"",
-                "\"httpStatus\":429", "\"providerErrorCode\":\"rate_limit_exceeded\"");
-        assertThat(json).doesNotContain("stackTrace", "cause", "message", "PRIVATE_CHUNK_CONTENT", "SECRET_KEY");
+                "\"httpStatus\":429", "\"providerErrorCode\":\"rate_limit_exceeded\"")
+                .doesNotContain("stackTrace", "cause", "message", "PRIVATE_CHUNK_CONTENT", "SECRET_KEY");
     }
 
     @Test void unclassifiedFailureDoesNotSerializeThrowable() {
         var fields = LiveRagFailureReport.fields(new IllegalStateException(
                 "SECRET_KEY PRIVATE_CHUNK_CONTENT"), "ollama", "embedding");
         String json = JsonMapper.shared().writeValueAsString(fields);
-        assertThat(json).contains("UNCLASSIFIED_FAILURE");
-        assertThat(json).doesNotContain("SECRET_KEY", "PRIVATE_CHUNK_CONTENT", "IllegalStateException");
+        assertThat(json).contains("UNCLASSIFIED_FAILURE")
+                .doesNotContain("SECRET_KEY", "PRIVATE_CHUNK_CONTENT", "IllegalStateException");
     }
 
     @Test void runnerWritesFailureReportBeforeRethrowing() throws Exception {
@@ -46,8 +46,8 @@ class LiveRagFailureReportTests {
         assertThat(Files.exists(output)).isTrue();
         String json = Files.readString(output);
         assertThat(json).contains("\"status\":\"FAILED\"", "\"stage\":\"embedding\"",
-                "\"httpStatus\":429");
-        assertThat(json).doesNotContain("stackTrace", "SECRET_KEY", "PRIVATE_CHUNK_CONTENT");
+                "\"httpStatus\":429")
+                .doesNotContain("stackTrace", "SECRET_KEY", "PRIVATE_CHUNK_CONTENT");
     }
 
     @Test void assertionErrorWritesSafeReportAndRethrowsOriginal() throws Exception {
@@ -68,9 +68,9 @@ class LiveRagFailureReportTests {
                 .isSameAs(failure);
         String json = Files.readString(output);
         assertThat(json).contains("\"status\":\"FAILED\"", "\"category\":\"ASSERTION_FAILURE\"",
-                "\"groundingStatus\":\"NO_RELEVANT_CONTEXT\"", "\"citationCount\":0");
-        assertThat(json).doesNotContain("SECRET_KEY", "INCIDENT_CONTENT", "full model response",
-                "stackTrace", "prompt", "embedding");
+                "\"groundingStatus\":\"NO_RELEVANT_CONTEXT\"", "\"citationCount\":0")
+                .doesNotContain("SECRET_KEY", "INCIDENT_CONTENT", "full model response",
+                        "stackTrace", "prompt", "embedding");
     }
 
     @Test void originalAssertionSurvivesReportWriteFailure() {

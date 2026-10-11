@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 public record CreateKnowledgeBaseRequestDTO(
         @Schema(description = "Stable lowercase machine-readable key", example = "checkout-service")
         @NotBlank @Size(max = 100)
-        @Pattern(regexp = "[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?", message = "must contain lowercase letters, digits and internal hyphens")
+        @Pattern(regexp = "[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?", message = "must contain lowercase letters, digits and internal hyphens")
         String key,
         @Schema(description = "Display name", example = "Checkout Service")
         @NotBlank @Size(max = 255) String name,

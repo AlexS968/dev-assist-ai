@@ -35,16 +35,16 @@ class IncidentAnalysisRepairPolicyTests {
     void twoUnknownCitationsStopAfterTwoChatCalls() {
         var context = citationContext();
         var first = new IncidentAnalysisInput("Title", "Description", false, context);
-        var repair = new IncidentAnalysisInput("Title", "Description", true, context);
+        var repairInput = new IncidentAnalysisInput("Title", "Description", true, context);
         var invalid = citationResult(List.of("S999"));
         when(gateway.analyze(first)).thenReturn(invalid);
-        when(gateway.analyze(repair)).thenReturn(invalid);
+        when(gateway.analyze(repairInput)).thenReturn(invalid);
         var resolver = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver();
         assertThatThrownBy(() -> policy.analyze(first,
                 candidate -> resolver.validate(candidate.analysis(), context)))
                 .isInstanceOf(IncidentAnalysisValidationException.class);
         verify(gateway).analyze(first);
-        verify(gateway).analyze(repair);
+        verify(gateway).analyze(repairInput);
         verifyNoMoreInteractions(gateway);
     }
 
@@ -52,15 +52,15 @@ class IncidentAnalysisRepairPolicyTests {
     void duplicateCitationTriggersOneRepair() {
         var context = citationContext();
         var first = new IncidentAnalysisInput("Title", "Description", false, context);
-        var repair = new IncidentAnalysisInput("Title", "Description", true, context);
+        var repairInput = new IncidentAnalysisInput("Title", "Description", true, context);
         when(gateway.analyze(first)).thenReturn(citationResult(List.of("S1", "S1")));
-        when(gateway.analyze(repair)).thenReturn(citationResult(List.of("S1")));
+        when(gateway.analyze(repairInput)).thenReturn(citationResult(List.of("S1")));
         var resolver = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver();
         var result = policy.analyze(first, candidate -> resolver.validate(candidate.analysis(), context));
         assertThat(result.attemptCount()).isEqualTo(2);
         assertThat(result.analysis().citationIds()).containsExactly("S1");
         verify(gateway).analyze(first);
-        verify(gateway).analyze(repair);
+        verify(gateway).analyze(repairInput);
         verifyNoMoreInteractions(gateway);
     }
 

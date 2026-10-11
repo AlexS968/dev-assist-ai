@@ -265,8 +265,8 @@ class LiveRagEvaluationTests {
         }
         String rendered = JsonMapper.shared().writeValueAsString(response);
         if ("openai".equals(required("RAG_LIVE_PROVIDER"))) {
-            assertThat(rendered.contains(required("OPENAI_API_KEY")))
-                    .as("Response must not contain provider credentials").isFalse();
+            assertThat(rendered).as("Response must not contain provider credentials")
+                    .doesNotContain(required("OPENAI_API_KEY"));
         }
         Map<String, Object> smoke = new LinkedHashMap<>();
         smoke.put("groundingStatus", response.groundingStatus());

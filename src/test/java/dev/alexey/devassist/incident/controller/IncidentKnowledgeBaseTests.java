@@ -170,8 +170,10 @@ class IncidentKnowledgeBaseTests {
                 """, String.class)).isEqualTo("YES");
         Incident incident = incident();
         assertThat(incidents.findById(incident.getId()).orElseThrow().getKnowledgeBase()).isNull();
+        UUID unknownBaseId = UUID.randomUUID();
+        UUID incidentId = incident.getId();
         assertThatThrownBy(() -> jdbc.update("update incidents set knowledge_base_id = ? where id = ?",
-                UUID.randomUUID(), incident.getId())).isInstanceOf(DataIntegrityViolationException.class);
+                unknownBaseId, incidentId)).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test void deletingIncidentDoesNotDeleteKnowledgeBase() {
