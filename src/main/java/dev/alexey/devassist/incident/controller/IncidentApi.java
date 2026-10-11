@@ -5,6 +5,7 @@ import dev.alexey.devassist.incident.dto.CreateIncidentRequestDTO;
 import dev.alexey.devassist.incident.dto.IncidentPageResponseDTO;
 import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
 import dev.alexey.devassist.incident.dto.UpdateIncidentStatusRequestDTO;
+import dev.alexey.devassist.incident.dto.UpdateIncidentKnowledgeBaseRequestDTO;
 
 import java.util.UUID;
 
@@ -35,6 +36,8 @@ public interface IncidentApi {
 	@Operation(summary = "Create an incident", description = "Creates an incident with status NEW and returns its URI in Location.")
 	@ApiResponse(responseCode = "201", description = "Incident created",
 			content = @Content(mediaType = "application/json", schema = @Schema(implementation = IncidentResponseDTO.class)))
+	@ApiResponse(responseCode = "404", description = "Selected KnowledgeBase does not exist",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 	ResponseEntity<IncidentResponseDTO> create(@Valid @RequestBody CreateIncidentRequestDTO request);
 
 	@GetMapping("/{id}")
@@ -67,6 +70,16 @@ public interface IncidentApi {
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 	IncidentResponseDTO updateStatus(@Parameter(description = "Incident UUID") @PathVariable UUID id,
 			@Valid @RequestBody UpdateIncidentStatusRequestDTO request);
+
+	@PatchMapping("/{id}/knowledge-base")
+	@Operation(summary = "Assign or clear an incident KnowledgeBase",
+			description = "An existing KnowledgeBase UUID assigns the association; null clears it. Repeated no-op updates preserve updatedAt.")
+	@ApiResponse(responseCode = "200", description = "Incident association updated",
+			content = @Content(mediaType = "application/json", schema = @Schema(implementation = IncidentResponseDTO.class)))
+	@ApiResponse(responseCode = "404", description = "Incident or KnowledgeBase does not exist",
+			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+	IncidentResponseDTO updateKnowledgeBase(@Parameter(description = "Incident UUID") @PathVariable UUID id,
+			@Valid @RequestBody UpdateIncidentKnowledgeBaseRequestDTO request);
 
 	@PostMapping("/{id}/analysis")
 	@Operation(summary = "Analyze an existing incident",

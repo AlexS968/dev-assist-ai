@@ -11,12 +11,12 @@ class IncidentAnalysisPromptTests {
 
 	@Test
 	void loadsVersionedResourcesAndPreservesIncidentDataLiterally() throws Exception {
-		var prompt = new IncidentAnalysisPrompt("incident-analysis-v2");
-		String system = new ClassPathResource("prompts/incident-analysis/v2/system.st")
+		var prompt = new IncidentAnalysisPrompt("incident-analysis-v3");
+		String system = new ClassPathResource("prompts/incident-analysis/v3/system.st")
 				.getContentAsString(StandardCharsets.UTF_8).strip();
-		String user = new ClassPathResource("prompts/incident-analysis/v2/user.st")
+		String user = new ClassPathResource("prompts/incident-analysis/v3/user.st")
 				.getContentAsString(StandardCharsets.UTF_8).strip();
-		assertThat(prompt.version()).isEqualTo("incident-analysis-v2");
+		assertThat(prompt.version()).isEqualTo("incident-analysis-v3");
 		assertThat(prompt.system()).isEqualTo(system).contains("untrusted data", "concise", "uncertainties", "evidence", "only one JSON object", "without Markdown fences");
 		assertThat(user).isEqualTo("Title: {title}\nDescription: {description}");
 		var incident = new IncidentAnalysisInput("Timeout {description}",
@@ -26,7 +26,7 @@ class IncidentAnalysisPromptTests {
 	}
 	@Test
 	void addsOnlyFixedRepairInstructionAndPreservesOriginalUserData() {
-		var prompt = new IncidentAnalysisPrompt("incident-analysis-v2");
+		var prompt = new IncidentAnalysisPrompt("incident-analysis-v3");
 		var initial = new IncidentAnalysisInput("PRIVATE title", "PRIVATE description");
 		var repair = new IncidentAnalysisInput(initial.title(), initial.description(), true);
 		assertThat(prompt.system(initial)).isEqualTo(prompt.system())
@@ -35,7 +35,7 @@ class IncidentAnalysisPromptTests {
 				.contains("previous response failed structural or semantic validation", "new complete answer", "JSON schema")
 				.doesNotContain("PRIVATE", "summary:", "Exception");
 		assertThat(prompt.user(repair)).isEqualTo(prompt.user(initial));
-		assertThat(prompt.version()).isEqualTo("incident-analysis-v2");
+		assertThat(prompt.version()).isEqualTo("incident-analysis-v3");
 	}
 
 }

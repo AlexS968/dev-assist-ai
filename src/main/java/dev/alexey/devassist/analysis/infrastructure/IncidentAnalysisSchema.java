@@ -13,7 +13,7 @@ public final class IncidentAnalysisSchema {
 
 	public IncidentAnalysisSchema() {
 		try {
-			json = new ClassPathResource("schemas/incident-analysis-v2.json")
+			json = new ClassPathResource("schemas/incident-analysis-v3.json")
 					.getContentAsString(StandardCharsets.UTF_8).strip();
 		}
 		catch (IOException exception) {

@@ -72,7 +72,7 @@ class IncidentControllerTests {
 
 	@Container
 	@ServiceConnection
-	static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+	static final PostgreSQLContainer postgres = new PostgreSQLContainer(org.testcontainers.utility.DockerImageName.parse("pgvector/pgvector:0.8.6-pg17-bookworm").asCompatibleSubstituteFor("postgres"));
 
 	@Autowired
 	WebApplicationContext context;
@@ -427,7 +427,7 @@ class IncidentControllerTests {
 		when(gateway.analyze(new IncidentAnalysisInput("Database unavailable", "Connection failed")))
 				.thenAnswer(invocation -> {
 					assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-					return new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v2", generatedAt,
+					return new IncidentAnalysisResult(analysis(), "fake", "test-model", "incident-analysis-v3", generatedAt,
 							125, 12, 8, 20, 1);
 				});
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
@@ -445,10 +445,19 @@ class IncidentControllerTests {
 				.andExpect(jsonPath("$.analysis.uncertainties[0]").value("Metrics are unavailable"))
 				.andExpect(jsonPath("$.provider").value("fake"))
 				.andExpect(jsonPath("$.model").value("test-model"))
-				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v2"))
+				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v3"))
 				.andExpect(jsonPath("$.generatedAt").value(generatedAt.toString()))
 				.andExpect(jsonPath("$.latencyMs").value(125))
 				.andExpect(jsonPath("$.attemptCount").value(1))
+				.andExpect(jsonPath("$.groundingStatus").value("RAG_DISABLED"))
+				.andExpect(jsonPath("$.grounded").value(false))
+				.andExpect(jsonPath("$.knowledgeBaseId").value(nullValue()))
+				.andExpect(jsonPath("$.citations").isEmpty())
+				.andExpect(jsonPath("$.retrievalLatencyMs").value(0))
+				.andExpect(jsonPath("$.retrievalInputTokens").value(nullValue()))
+				.andExpect(jsonPath("$.retrievedChunkCount").value(0))
+				.andExpect(jsonPath("$.providedContextChunkCount").value(0))
+				.andExpect(jsonPath("$.providedContextCharacters").value(0))
 				.andExpect(jsonPath("$.inputTokens").value(12))
 				.andExpect(jsonPath("$.outputTokens").value(8))
 				.andExpect(jsonPath("$.totalTokens").value(20));
@@ -458,10 +467,27 @@ class IncidentControllerTests {
 		assertThat(afterAnalysis).usingRecursiveComparison().isEqualTo(beforeAnalysis);
 	}
 
+    @Test
+    void repeatedUnknownCitationReturnsSafe502AfterTwoCalls() throws Exception {
+        var incident = repository.save(new Incident("Title", "PRIVATE description", IncidentSource.API));
+        var original = analysis();
+        var invalid = new dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis(
+                original.summary(), original.probableCauses(), original.investigationSteps(),
+                original.uncertainties(), java.util.List.of("S999"));
+        when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult(invalid, "fake", "model",
+                "incident-analysis-v3", Instant.EPOCH, 1, 1, 1, 2, 1));
+        var response = mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.detail").value("Incident analysis is temporarily unavailable."))
+                .andReturn();
+        assertThat(response.getResponse().getContentAsString()).doesNotContain("PRIVATE", "S999");
+        verify(gateway, times(2)).analyze(any());
+    }
+
 	@Test
 	void analysisPreservesMissingUsageAsJsonNull() throws Exception {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
-		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
+		when(gateway.analyze(any())).thenReturn(new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v3",
 				Instant.parse("2026-09-27T12:00:00Z"), 1, null, null, null, 1));
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
 				.andExpect(status().isOk())
@@ -518,7 +544,7 @@ class IncidentControllerTests {
 		var incident = repository.save(new Incident("Title", "Description", IncidentSource.API));
 		when(gateway.analyze(any())).thenAnswer(invocation -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2", Instant.EPOCH, 1, null, null, null, 1);
+			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v3", Instant.EPOCH, 1, null, null, null, 1);
 		});
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
@@ -579,7 +605,7 @@ class IncidentControllerTests {
 		});
 		when(gateway.analyze(new IncidentAnalysisInput("Title", "Description", true))).thenAnswer(invocation -> {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
+			return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v3",
 					Instant.EPOCH, 25, 12, 8, 20, 1);
 		});
 		mockMvc.perform(post(INCIDENTS_URL + "/{id}/analysis", incident.getId()))
@@ -589,7 +615,7 @@ class IncidentControllerTests {
 				.andExpect(jsonPath("$.outputTokens").value(13))
 				.andExpect(jsonPath("$.totalTokens").value(35))
 				.andExpect(jsonPath("$.analysis.summary").value("Database timeouts"))
-				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v2"))
+				.andExpect(jsonPath("$.promptVersion").value("incident-analysis-v3"))
 				.andExpect(jsonPath("$.content").doesNotExist());
 		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description"));
 		verify(gateway).analyze(new IncidentAnalysisInput("Title", "Description", true));

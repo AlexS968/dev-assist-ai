@@ -13,14 +13,19 @@ deployment rather than wrapping an LLM API in a chat interface.
 
 ## Project status
 
-**Phase 3 — Native structured incident analysis**
+**Phase 4 — RAG storage, ingestion, embeddings, retrieval and explicit Incident association**
 
 Currently implemented:
 
 - Java 21 and Spring Boot 4.1.1;
 - incident creation, retrieval, listing and status API;
 - Spring AI 2.0.1 OpenAI/Ollama adapters with native JSON schema and offline tests;
-- PostgreSQL;
+- PostgreSQL 17 with pgvector extension;
+- isolated KnowledgeBase, document and chunk persistence;
+- provider-neutral Markdown ingestion with normalization, SHA-256, deterministic chunking and transactional updates;
+- independently selected OpenAI/Ollama embedding gateway and nullable PostgreSQL `vector(768)` storage;
+- explicit, provider-neutral embedding orchestration and exact PostgreSQL cosine retrieval;
+- optional Incident–KnowledgeBase association and minimal KnowledgeBase create/get/list API;
 - Flyway migrations;
 - Docker Compose development database;
 - Testcontainers integration tests;
@@ -56,6 +61,7 @@ deployment unit, and explicit boundaries between business capabilities.
 See:
 
 - [Current architecture](docs/architecture/README.md)
+- [RAG storage foundation](docs/architecture/rag.md)
 - [Architecture Decision Records](docs/adr/README.md)
 
 ## Prerequisites
@@ -82,7 +88,8 @@ docker compose ps
 ```
 
 For the default OpenAI provider, provide `OPENAI_API_KEY` in your shell or IDE
-environment. Alternatively, select `AI_PROVIDER=ollama` without a key (see Configuration).
+environment. Alternatively, select both `AI_PROVIDER=ollama` and
+`RAG_EMBEDDING_PROVIDER=ollama` without a key (see Configuration).
 Then run the application:
 
 ```bash
@@ -135,7 +142,7 @@ return 409 and 400.
 ## Incident analysis
 
 `POST /api/v1/incidents/{id}/analysis` takes an incident UUID and no request body.
-Only the stored title and description are sent to the AI gateway. A successful
+The stored title and description are sent to the AI gateway. When RAG applies, bounded retrieved sources are sent as a separate untrusted data message. A successful
 200 response has this shape (illustrative values):
 
 ```json
@@ -157,13 +164,22 @@ Only the stored title and description are sent to the AI gateway. A successful
   },
   "provider": "openai",
   "model": "gpt-6-luna",
-  "promptVersion": "incident-analysis-v2",
+  "promptVersion": "incident-analysis-v3",
   "generatedAt": "2026-09-27T12:00:00Z",
   "latencyMs": 1250,
   "attemptCount": 1,
   "inputTokens": 120,
   "outputTokens": 80,
-  "totalTokens": 200
+  "totalTokens": 200,
+  "groundingStatus": "RAG_DISABLED",
+  "grounded": false,
+  "knowledgeBaseId": null,
+  "citations": [],
+  "retrievalLatencyMs": 0,
+  "retrievalInputTokens": null,
+  "retrievedChunkCount": 0,
+  "providedContextChunkCount": 0,
+  "providedContextCharacters": 0
 }
 ```
 
@@ -183,7 +199,7 @@ use mocks and do not consume tokens.
 Docker must be running because integration tests use Testcontainers.
 
 The tests do not use the PostgreSQL instance from `compose.yaml`. They start an
-isolated temporary PostgreSQL container and apply the same Flyway migrations
+isolated temporary pgvector/PostgreSQL container and apply the same Flyway migrations
 used by the application.
 
 Run all checks:
@@ -216,13 +232,30 @@ Local defaults are provided for development:
 | `DB_USERNAME` | `dev_assist` |
 | `DB_PASSWORD` | `dev_assist` |
 | `AI_PROVIDER` | `openai` (allowed: `openai`, `ollama`) |
-| `OPENAI_API_KEY` | Required only for `openai`; no default |
+| `OPENAI_API_KEY` | Required when either chat or embedding provider is `openai`; no default |
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `OLLAMA_MODEL` | `qwen3:14b` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` |
-| `AI_PROMPT_VERSION` | `incident-analysis-v2` |
+| `AI_PROMPT_VERSION` | `incident-analysis-v3` |
 | `AI_MAX_OUTPUT_TOKENS` | `1000` |
 | `AI_TIMEOUT` | `20s` |
+| `RAG_ENABLED` | `false`; enables embedding runtime when `true` |
+| `RAG_EMBEDDING_PROVIDER` | `openai` (allowed: `openai`, `ollama`) |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` |
+| `RAG_EMBEDDING_DIMENSIONS` | `768` (only supported value) |
+| `RAG_EMBEDDING_TIMEOUT` | `20s` |
+| `RAG_EMBEDDING_BATCH_SIZE` | `32` (1–256) |
+| `RAG_EMBEDDING_MAX_CHUNKS_PER_RUN` | `500` (1–10000) |
+| `RAG_RETRIEVAL_TOP_K` | `5` (1–`RAG_RETRIEVAL_MAX_TOP_K`) |
+| `RAG_RETRIEVAL_MAX_TOP_K` | `20` (1–100) |
+| `RAG_RETRIEVAL_OPENAI_SIMILARITY_THRESHOLD` | `0.60` (0–1; selected when the embedding provider is OpenAI) |
+| `RAG_RETRIEVAL_OLLAMA_SIMILARITY_THRESHOLD` | `0.70` (0–1; selected when the embedding provider is Ollama) |
+
+Retrieval chooses the threshold from the active embedding provider, independently
+of the chat provider. A retrieval request can override it explicitly. These
+defaults are provisional observations from a small fictional corpus and need
+recalibration on a larger representative dataset.
 
 The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -240,10 +273,10 @@ and a loopback base URL where required; Ollama contexts need no key at all.
 Endpoint tests replace the gateway and adapter tests mock the model/API. No OpenAI account
 or tokens are required for `./mvnw clean verify`.
 
-Prompts are loaded at startup from `prompts/incident-analysis/v2/system.st` and
+Prompts are loaded at startup from `prompts/incident-analysis/v3/system.st` and
 `user.st`. `app.ai.prompt-version` identifies the immutable template pair and is
-returned as `promptVersion`. Only `incident-analysis-v2` is compatible with the structured runtime;
-blank, unknown and v1 versions fail startup. The v1 resources are retained for history. New behavior requires a new version.
+returned as `promptVersion`. Only `incident-analysis-v3` is compatible with the structured runtime;
+blank, unknown, v1 and v2 versions fail startup. The v1 and v2 resources are retained for history. New behavior requires a new version.
 
 `app.ai.max-output-tokens` accepts 1–16384 tokens (an application guardrail, not a
 claim about every model's capacity). The adapters set OpenAI `maxCompletionTokens`
@@ -265,12 +298,20 @@ provider stops processing or billing work already received.
 Switch manually in the shell or IDE environment before restarting the application:
 
 ```bash
-# Local Ollama: no OPENAI_API_KEY is needed.
+# Local Ollama chat with disabled RAG needs no OPENAI_API_KEY.
 unset OPENAI_API_KEY
 export AI_PROVIDER=ollama
+export RAG_ENABLED=false
 export OLLAMA_MODEL=qwen3:14b
 export OLLAMA_BASE_URL=http://localhost:11434
 ```
+
+To enable Ollama embeddings independently, set `RAG_ENABLED=true` and
+`RAG_EMBEDDING_PROVIDER=ollama`. For OpenAI chat with Ollama embeddings, keep
+`AI_PROVIDER=openai`; for Ollama chat with OpenAI embeddings, set
+`AI_PROVIDER=ollama`, `RAG_ENABLED=true`, `RAG_EMBEDDING_PROVIDER=openai` and
+provide `OPENAI_API_KEY`. These choices do not enable retrieval during Incident
+analysis or change its prompt.
 
 To switch back, set `AI_PROVIDER=openai` and provide `OPENAI_API_KEY` securely in
 your environment. `OPENAI_MODEL` defaults to `gpt-6-luna`. Selection is explicit;
@@ -290,6 +331,32 @@ Ollama reports input/output counts separately; absent counts, including an
 unreported total, are returned as null.
 
 See [AI infrastructure and boundaries](docs/architecture/ai-integration.md).
+Embedding runtime is disabled by default (`RAG_ENABLED=false`). Storage and
+ingestion remain available; no `KnowledgeEmbeddingGateway`, embedding client or
+embedding credentials are required. Incident analysis does not depend on a
+KnowledgeBase or embedding provider. When enabled, embedding provider selection
+is independent of `AI_PROVIDER`: OpenAI embeddings require `OPENAI_API_KEY`,
+while Ollama embeddings use `OLLAMA_BASE_URL`. For local Ollama embeddings, run
+`ollama pull nomic-embed-text` before use. Ingestion does not automatically
+generate embeddings. See [RAG architecture](docs/architecture/rag.md)
+and [ADR-005](docs/adr/ADR-005-embedding-foundation.md). Exact retrieval is
+available through an explicit application service call when RAG is enabled;
+it has no public endpoint. Incident analysis uses it for explicitly linked bases. It embeds a query only when
+the selected KnowledgeBase has compatible vectors. Results are scoped to that
+base and the active provider/model/dimensions profile. Retrieved content is
+untrusted and is passed only as bounded data for eligible analysis. See [ADR-006](docs/adr/ADR-006-exact-rag-retrieval.md).
+
+A KnowledgeBase normally represents one project or service. Create an empty base with
+`POST /api/v1/knowledge-bases`; read it with `GET /api/v1/knowledge-bases/{id}` or list
+bases with `GET /api/v1/knowledge-bases?page=0&size=20` (maximum size 100, ordered by
+name then ID). Incident creation accepts optional `knowledgeBaseId`, and
+`PATCH /api/v1/incidents/{id}/knowledge-base` assigns an existing base or clears
+the association with `null`. The application never infers a base from incident text.
+An Incident without a base is analyzed as before. Association is available even
+when `RAG_ENABLED=false`; associating a base alone does not enable grounded
+generation. Deleting a base at the repository level leaves Incidents in place with
+null association and cascades to its documents and chunks. There is no public base
+delete endpoint yet. See [ADR-007](docs/adr/ADR-007-incident-knowledge-base-association.md).
 
 ## Structured-output smoke-test results
 
@@ -369,7 +436,7 @@ There are no loops, background calls, sleep, SDK retries or provider fallback.
 
 The second call uses the original incident data and same canonical native schema,
 with a fixed shared repair instruction. No invalid model response or error diagnostics
-are sent back to the provider. The prompt version remains `incident-analysis-v2`.
+are sent back to the provider. The current prompt version is `incident-analysis-v3`.
 
 `attemptCount` is 1 or 2. First-success metrics are unchanged; repaired-success
 latency covers the whole orchestration. Each token field sums both attempts only if
@@ -391,11 +458,11 @@ prioritization, not probability or measured confidence. No `rootCause` is assert
 See the [structured contract](docs/architecture/structured-incident-analysis.md).
 
 - analysis is synchronous and results are not persisted;
-- successful v2 smoke tests, including the post-repair-policy happy path, establish integration evidence, not a benchmark or full evaluation;
+- successful earlier smoke tests, including the post-repair-policy happy path, establish integration evidence, not a benchmark or full evaluation;
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- no vector search;
+- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval, optional Incident association and an offline evaluation harness exist; public upload API, automatic embedding and live quality calibration are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;
@@ -418,6 +485,28 @@ fix/flyway-configuration
 
 `main` should remain in a buildable state.
 
+### Grounded analysis (Phase 4 step 7)
+
+Incident analysis now performs exact retrieval before generation when `RAG_ENABLED=true` and the Incident is linked to a KnowledgeBase. Selected untrusted chunks are bounded by `RAG_MAX_CONTEXT_CHUNKS=5` and `RAG_MAX_CONTEXT_CHARS=6000`. The v3 structured response requires citation IDs; the backend validates them against sources actually sent, then returns citation metadata and a grounding status. `grounded=true` means at least one valid source reference, not proven factual correctness. Empty retrieval or retrieval failure continues ordinary analysis without context; chat errors retain 502/504 behavior. Retrieval can increase latency and cost. Embedding token usage is separate from generation usage. Analysis is not persisted. Provider-specific thresholds remain provisional; see [ADR-008](docs/adr/ADR-008-grounded-incident-analysis.md).
+
 ## License
 
 This project is licensed under the MIT License.
+# RAG evaluation
+
+Phase 4 includes a fictional test-only corpus and deterministic offline checks.
+The optional OpenAI/Ollama live evaluation is excluded from normal builds and
+CI. See [RAG evaluation](docs/evaluation/rag-evaluation.md) for prerequisites,
+metrics, threshold sweep, report format and explicit run commands. The
+provisional retrieval thresholds are OpenAI 0.60 and Ollama 0.70, selected by
+the embedding provider. They need calibration on a larger corpus. The recorded
+OpenAI live run completed with `CONTEXT_PROVIDED`, one backend-validated `S1`
+citation and `grounded=true`; see the evaluation report for the exact results
+and limitations. The previously documented Ollama observations are separate.
+
+The live commands require only `RAG_LIVE_PROVIDER=ollama` or
+`RAG_LIVE_PROVIDER=openai` plus `OPENAI_API_KEY` for OpenAI. Ollama must
+already be running with `qwen3:14b` and `nomic-embed-text` installed.
+Testcontainers starts PostgreSQL; the test starts Spring Boot. A successful
+live run writes `target/rag-evaluation/{provider}-report.json`; `Tests run: 0`
+indicates a configuration error.

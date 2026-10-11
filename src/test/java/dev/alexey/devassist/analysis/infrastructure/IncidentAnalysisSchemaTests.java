@@ -13,7 +13,7 @@ class IncidentAnalysisSchemaTests {
 	@Test
 	void canonicalSchemaRequiresExactlyTheContractAtEveryObjectLevel() {
 		var root = JsonMapper.shared().readTree(schema.json());
-		assertObject(root, "summary", "probableCauses", "investigationSteps", "uncertainties");
+		assertObject(root, "summary", "probableCauses", "investigationSteps", "uncertainties", "citationIds");
 		assertThat(root.at("/properties/summary/type").asString()).isEqualTo("string");
 		var cause = root.at("/properties/probableCauses/items");
 		assertObject(cause, "title", "explanation", "likelihood", "evidenceToCheck");
@@ -27,6 +27,7 @@ class IncidentAnalysisSchemaTests {
 		assertThat(step.at("/properties/action/type").asString()).isEqualTo("string");
 		assertThat(step.at("/properties/rationale/type").asString()).isEqualTo("string");
 		assertThat(root.at("/properties/uncertainties/items/type").asString()).isEqualTo("string");
+        assertThat(root.at("/properties/citationIds/items/type").asString()).isEqualTo("string");
 		JsonNode providerSchema = JsonMapper.shared().valueToTree(schema.asMap());
 		assertThat(providerSchema).isEqualTo(root);
 	}

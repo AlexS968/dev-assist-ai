@@ -31,6 +31,85 @@ class IncidentAnalysisRepairPolicyTests {
 		verifyNoMoreInteractions(gateway);
 	}
 
+    @Test
+    void twoUnknownCitationsStopAfterTwoChatCalls() {
+        var context = citationContext();
+        var first = new IncidentAnalysisInput("Title", "Description", false, context);
+        var repairInput = new IncidentAnalysisInput("Title", "Description", true, context);
+        var invalid = citationResult(List.of("S999"));
+        when(gateway.analyze(first)).thenReturn(invalid);
+        when(gateway.analyze(repairInput)).thenReturn(invalid);
+        var resolver = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver();
+        assertThatThrownBy(() -> policy.analyze(first,
+                candidate -> resolver.validate(candidate.analysis(), context)))
+                .isInstanceOf(IncidentAnalysisValidationException.class);
+        verify(gateway).analyze(first);
+        verify(gateway).analyze(repairInput);
+        verifyNoMoreInteractions(gateway);
+    }
+
+    @Test
+    void duplicateCitationTriggersOneRepair() {
+        var context = citationContext();
+        var first = new IncidentAnalysisInput("Title", "Description", false, context);
+        var repairInput = new IncidentAnalysisInput("Title", "Description", true, context);
+        when(gateway.analyze(first)).thenReturn(citationResult(List.of("S1", "S1")));
+        when(gateway.analyze(repairInput)).thenReturn(citationResult(List.of("S1")));
+        var resolver = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver();
+        var result = policy.analyze(first, candidate -> resolver.validate(candidate.analysis(), context));
+        assertThat(result.attemptCount()).isEqualTo(2);
+        assertThat(result.analysis().citationIds()).containsExactly("S1");
+        verify(gateway).analyze(first);
+        verify(gateway).analyze(repairInput);
+        verifyNoMoreInteractions(gateway);
+    }
+
+    private static dev.alexey.devassist.analysis.grounding.IncidentAnalysisContext citationContext() {
+        var chunk = new dev.alexey.devassist.knowledge.retrieval.RetrievedKnowledgeChunk(
+                java.util.UUID.randomUUID(), java.util.UUID.randomUUID(), "ext", "Runbook",
+                dev.alexey.devassist.knowledge.enums.KnowledgeSourceType.RUNBOOK, null,
+                0, "evidence", java.util.Map.of(), 0.9);
+        return new dev.alexey.devassist.analysis.grounding.IncidentAnalysisContext(
+                List.of(new dev.alexey.devassist.analysis.grounding.IncidentAnalysisSource("S1", chunk)), 8);
+    }
+
+    private static IncidentAnalysisResult citationResult(List<String> ids) {
+        var original = analysis();
+        var cited = new dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis(original.summary(),
+                original.probableCauses(), original.investigationSteps(), original.uncertainties(), ids);
+        return new IncidentAnalysisResult(cited, "fake", "model", "incident-analysis-v3",
+                Instant.EPOCH, 10, 10, 5, 15, 1);
+    }
+
+    @Test
+    void semanticCitationFailureRepairsWithIdenticalContext() {
+        var chunk = new dev.alexey.devassist.knowledge.retrieval.RetrievedKnowledgeChunk(
+                java.util.UUID.randomUUID(), java.util.UUID.randomUUID(), "ext", "Runbook",
+                dev.alexey.devassist.knowledge.enums.KnowledgeSourceType.RUNBOOK, null,
+                0, "untrusted", java.util.Map.of(), 0.9);
+        var context = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisContext(
+                List.of(new dev.alexey.devassist.analysis.grounding.IncidentAnalysisSource("S1", chunk)), 9);
+        var first = new IncidentAnalysisInput("Title", "Description", false, context);
+        var second = new IncidentAnalysisInput("Title", "Description", true, context);
+        var original = analysis();
+        var invalid = new dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis(original.summary(),
+                original.probableCauses(), original.investigationSteps(), original.uncertainties(), List.of("S2"));
+        var valid = new dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis(original.summary(),
+                original.probableCauses(), original.investigationSteps(), original.uncertainties(), List.of("S1"));
+        when(gateway.analyze(first)).thenReturn(new IncidentAnalysisResult(invalid, "fake", "model",
+                "incident-analysis-v3", Instant.EPOCH, 10, 10, 5, 15, 1));
+        when(gateway.analyze(second)).thenReturn(new IncidentAnalysisResult(valid, "fake", "model",
+                "incident-analysis-v3", Instant.EPOCH, 20, 12, 8, 20, 1));
+        var resolver = new dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver();
+        var result = policy.analyze(first, candidate -> resolver.validate(candidate.analysis(), context));
+        assertThat(result.attemptCount()).isEqualTo(2);
+        assertThat(result.inputTokens()).isEqualTo(22);
+        assertThat(result.analysis().citationIds()).containsExactly("S1");
+        verify(gateway).analyze(first);
+        verify(gateway).analyze(second);
+        verifyNoMoreInteractions(gateway);
+    }
+
 	@ParameterizedTest
 	@MethodSource("repairableFailures")
 	void repairsOnceAndMeasuresWholeOrchestration(IncidentAnalysisException failure) {
@@ -51,7 +130,7 @@ class IncidentAnalysisRepairPolicyTests {
 		assertThat(result.analysis()).isEqualTo(analysis());
 		assertThat(result.provider()).isEqualTo("fake");
 		assertThat(result.model()).isEqualTo("model");
-		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v2");
+		assertThat(result.promptVersion()).isEqualTo("incident-analysis-v3");
 		assertThat(result.generatedAt()).isEqualTo(Instant.EPOCH);
 		verifyTwoCalls();
 	}
@@ -121,7 +200,7 @@ class IncidentAnalysisRepairPolicyTests {
 	}
 
 	private IncidentAnalysisResult result(Integer inputTokens, Integer outputTokens, Integer totalTokens) {
-		return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v2",
+		return new IncidentAnalysisResult(analysis(), "fake", "model", "incident-analysis-v3",
 				Instant.EPOCH, 25, inputTokens, outputTokens, totalTokens, 1);
 	}
 

@@ -24,9 +24,34 @@ import org.mapstruct.ReportingPolicy;
 @Mapper(componentModel = MappingConstants.ComponentModel.SPRING, unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface IncidentMapper {
 
+	@Mapping(source = "knowledgeBase.id", target = "knowledgeBaseId")
 	IncidentResponseDTO toResponse(Incident incident);
 
-	IncidentAnalysisResponseDTO toAnalysisResponse(IncidentAnalysisResult result);
+    @Mapping(source = "result.analysis", target = "analysis")
+    @Mapping(source = "result.provider", target = "provider")
+    @Mapping(source = "result.model", target = "model")
+    @Mapping(source = "result.promptVersion", target = "promptVersion")
+    @Mapping(source = "result.generatedAt", target = "generatedAt")
+    @Mapping(source = "result.latencyMs", target = "latencyMs")
+    @Mapping(source = "result.inputTokens", target = "inputTokens")
+    @Mapping(source = "result.outputTokens", target = "outputTokens")
+    @Mapping(source = "result.totalTokens", target = "totalTokens")
+    @Mapping(source = "result.attemptCount", target = "attemptCount")
+    @Mapping(source = "grounding.status", target = "groundingStatus")
+    @Mapping(expression = "java(!citations.isEmpty())", target = "grounded")
+    @Mapping(source = "grounding.knowledgeBaseId", target = "knowledgeBaseId")
+    @Mapping(source = "grounding.retrievalLatencyMs", target = "retrievalLatencyMs")
+    @Mapping(source = "grounding.retrievalInputTokens", target = "retrievalInputTokens")
+    @Mapping(source = "grounding.retrievedChunkCount", target = "retrievedChunkCount")
+    @Mapping(expression = "java(grounding.providedContextChunkCount())", target = "providedContextChunkCount")
+    @Mapping(expression = "java(grounding.providedContextCharacters())", target = "providedContextCharacters")
+    IncidentAnalysisResponseDTO toAnalysisResponse(IncidentAnalysisResult result,
+            dev.alexey.devassist.analysis.grounding.GroundingDecision grounding,
+            List<dev.alexey.devassist.incident.dto.IncidentAnalysisCitationDTO> citations);
+
+    dev.alexey.devassist.incident.dto.IncidentAnalysisCitationDTO toCitationResponse(
+            dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitation citation);
+
 
 	StructuredIncidentAnalysisDTO toStructuredAnalysis(StructuredIncidentAnalysis analysis);
 

@@ -4,6 +4,7 @@ import dev.alexey.devassist.analysis.exception.IncidentAnalysisException;
 import dev.alexey.devassist.analysis.exception.IncidentAnalysisTimeoutException;
 
 import dev.alexey.devassist.incident.controller.IncidentController;
+import dev.alexey.devassist.knowledge.exception.KnowledgeBaseNotFoundException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -22,6 +23,11 @@ public class IncidentExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler(IncidentNotFoundException.class)
 	public ProblemDetail handleIncidentNotFound(IncidentNotFoundException exception) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+	}
+
+	@ExceptionHandler(KnowledgeBaseNotFoundException.class)
+	public ProblemDetail handleKnowledgeBaseNotFound(KnowledgeBaseNotFoundException exception) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "KnowledgeBase not found.");
 	}
 
 	@ExceptionHandler(IncidentAnalysisException.class)

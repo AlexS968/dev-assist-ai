@@ -13,6 +13,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,7 +26,7 @@ class OpenApiTests {
 
 	@Container
 	@ServiceConnection
-	static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+	static final PostgreSQLContainer postgres = new PostgreSQLContainer(org.testcontainers.utility.DockerImageName.parse("pgvector/pgvector:0.8.6-pg17-bookworm").asCompatibleSubstituteFor("postgres"));
 
 	@Autowired
 	WebApplicationContext context;
@@ -45,7 +47,11 @@ class OpenApiTests {
 				"$.paths['/api/v1/incidents/{id}'].get",
 				"$.paths['/api/v1/incidents'].get",
 				"$.paths['/api/v1/incidents/{id}/status'].patch",
-				"$.paths['/api/v1/incidents/{id}/analysis'].post"
+				"$.paths['/api/v1/incidents/{id}/analysis'].post",
+				"$.paths['/api/v1/incidents/{id}/knowledge-base'].patch",
+				"$.paths['/api/v1/knowledge-bases'].post",
+				"$.paths['/api/v1/knowledge-bases/{id}'].get",
+				"$.paths['/api/v1/knowledge-bases'].get"
 		};
 		for (String operation : operations) {
 			jsonPath(operation + ".summary").isNotEmpty().match(result);
@@ -53,11 +59,15 @@ class OpenApiTests {
 		}
 		jsonPath(operations[0] + ".responses['201']").exists().match(result);
 		for (int index = 1; index < operations.length; index++) {
-			jsonPath(operations[index] + ".responses['200']").exists().match(result);
+			if (index != 6) jsonPath(operations[index] + ".responses['200']").exists().match(result);
 		}
 		jsonPath(operations[1] + ".responses['404']").exists().match(result);
 		jsonPath(operations[3] + ".responses['404']").exists().match(result);
 		jsonPath(operations[3] + ".responses['409']").exists().match(result);
+		jsonPath(operations[5] + ".responses['404']").exists().match(result);
+		jsonPath(operations[6] + ".responses['201']").exists().match(result);
+		jsonPath(operations[6] + ".responses['409']").exists().match(result);
+		jsonPath(operations[7] + ".responses['404']").exists().match(result);
 
 
 		jsonPath(operations[4] + ".responses['404'].content['application/problem+json']").exists().match(result);
@@ -75,11 +85,32 @@ class OpenApiTests {
 		}
 
 		assertStructuredSchemas(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.groundingStatus")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.groundingStatus.enum")
+                .value(containsInAnyOrder("RAG_DISABLED", "NO_KNOWLEDGE_BASE",
+                        "NO_RELEVANT_CONTEXT", "CONTEXT_PROVIDED", "RETRIEVAL_FAILED")).match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.grounded")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.citations")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisResponseDTO.properties.retrievalInputTokens")
+                .exists().match(result);
+        jsonPath("$.components.schemas.IncidentAnalysisCitationDTO.properties.content")
+                .doesNotExist().match(result);
 
 		for (String schema : new String[]{"CreateIncidentRequestDTO", "IncidentResponseDTO",
-				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO", "IncidentAnalysisResponseDTO"}) {
+				"IncidentPageResponseDTO", "UpdateIncidentStatusRequestDTO", "IncidentAnalysisResponseDTO",
+				"UpdateIncidentKnowledgeBaseRequestDTO", "CreateKnowledgeBaseRequestDTO",
+				"KnowledgeBaseResponseDTO", "KnowledgeBasePageResponseDTO"}) {
 			jsonPath("$.components.schemas." + schema).exists().match(result);
 		}
+		jsonPath("$.components.schemas.CreateIncidentRequestDTO.properties.knowledgeBaseId").exists().match(result);
+		jsonPath("$.components.schemas.CreateIncidentRequestDTO.required")
+				.value(not(hasItem("knowledgeBaseId"))).match(result);
+		jsonPath("$.components.schemas.IncidentResponseDTO.properties.knowledgeBaseId").exists().match(result);
+		jsonPath("$.components.schemas.KnowledgeBaseResponseDTO.properties.documents").doesNotExist().match(result);
+		jsonPath("$.components.schemas.KnowledgeBaseResponseDTO.properties.chunks").doesNotExist().match(result);
 		jsonPath("$.components.schemas.IncidentPageResponseDTO.properties.items.items['$ref']")
 				.value("#/components/schemas/IncidentResponseDTO").match(result);
 

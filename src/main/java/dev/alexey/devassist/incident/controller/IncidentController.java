@@ -5,6 +5,7 @@ import dev.alexey.devassist.incident.dto.IncidentResponseDTO;
 import dev.alexey.devassist.incident.dto.IncidentPageResponseDTO;
 import dev.alexey.devassist.incident.dto.UpdateIncidentStatusRequestDTO;
 import dev.alexey.devassist.incident.dto.IncidentAnalysisResponseDTO;
+import dev.alexey.devassist.incident.dto.UpdateIncidentKnowledgeBaseRequestDTO;
 import dev.alexey.devassist.incident.service.IncidentAnalysisService;
 import dev.alexey.devassist.incident.service.IncidentService;
 
@@ -30,7 +31,8 @@ public class IncidentController implements IncidentApi {
 
 	@Override
 	public ResponseEntity<IncidentResponseDTO> create(CreateIncidentRequestDTO request) {
-		IncidentResponseDTO response = service.create(request.title(), request.description(), request.source());
+		IncidentResponseDTO response = service.create(request.title(), request.description(), request.source(),
+				request.knowledgeBaseId());
 		URI location = ServletUriComponentsBuilder.fromCurrentRequest()
 				.path("/{id}")
 				.buildAndExpand(response.id())
@@ -54,6 +56,11 @@ public class IncidentController implements IncidentApi {
 	public IncidentResponseDTO updateStatus(UUID id,
 			UpdateIncidentStatusRequestDTO request) {
 		return service.updateStatus(id, request.status());
+	}
+
+	@Override
+	public IncidentResponseDTO updateKnowledgeBase(UUID id, UpdateIncidentKnowledgeBaseRequestDTO request) {
+		return service.updateKnowledgeBase(id, request.knowledgeBaseId());
 	}
 
 	@Override

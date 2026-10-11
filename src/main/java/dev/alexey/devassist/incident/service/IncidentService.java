@@ -10,6 +10,8 @@ import dev.alexey.devassist.incident.enums.IncidentStatus;
 import dev.alexey.devassist.incident.exception.IncidentNotFoundException;
 import dev.alexey.devassist.incident.exception.InvalidIncidentStatusTransitionException;
 import dev.alexey.devassist.incident.repository.IncidentRepository;
+import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
+import dev.alexey.devassist.knowledge.service.KnowledgeBaseService;
 
 import java.util.UUID;
 
@@ -23,15 +25,29 @@ public class IncidentService {
 
 	private final IncidentRepository repository;
 	private final IncidentMapper mapper;
+	private final KnowledgeBaseService knowledgeBases;
 
-	public IncidentService(IncidentRepository repository, IncidentMapper mapper) {
+	public IncidentService(IncidentRepository repository, IncidentMapper mapper, KnowledgeBaseService knowledgeBases) {
 		this.repository = repository;
 		this.mapper = mapper;
+		this.knowledgeBases = knowledgeBases;
 	}
 
 	@Transactional
 	public IncidentResponseDTO create(String title, String description, IncidentSource source) {
-		return mapper.toResponse(repository.save(new Incident(title, description, source)));
+		return createIncident(title, description, source, null);
+	}
+
+	@Transactional
+	public IncidentResponseDTO create(String title, String description, IncidentSource source, UUID knowledgeBaseId) {
+		return createIncident(title, description, source, knowledgeBaseId);
+	}
+
+	private IncidentResponseDTO createIncident(String title, String description, IncidentSource source,
+			UUID knowledgeBaseId) {
+		Incident incident = new Incident(title, description, source);
+		if (knowledgeBaseId != null) incident.assignKnowledgeBase(knowledgeBases.requireEntity(knowledgeBaseId));
+		return mapper.toResponse(repository.save(incident));
 	}
 
 	@Transactional(readOnly = true)
@@ -57,6 +73,21 @@ public class IncidentService {
 		}
 		incident.setStatus(status);
 		// Apply @PreUpdate before taking the response snapshot.
+		repository.flush();
+		return mapper.toResponse(incident);
+	}
+
+	@Transactional
+	public IncidentResponseDTO updateKnowledgeBase(UUID incidentId, UUID knowledgeBaseId) {
+		Incident incident = repository.findById(incidentId)
+				.orElseThrow(() -> new IncidentNotFoundException(incidentId));
+		UUID currentId = incident.getKnowledgeBase() == null ? null : incident.getKnowledgeBase().getId();
+		if (java.util.Objects.equals(currentId, knowledgeBaseId)) return mapper.toResponse(incident);
+		if (knowledgeBaseId == null) incident.clearKnowledgeBase();
+		else {
+			KnowledgeBase base = knowledgeBases.requireEntity(knowledgeBaseId);
+			incident.assignKnowledgeBase(base);
+		}
 		repository.flush();
 		return mapper.toResponse(incident);
 	}

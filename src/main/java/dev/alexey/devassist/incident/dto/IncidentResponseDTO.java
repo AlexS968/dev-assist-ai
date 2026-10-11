@@ -24,5 +24,7 @@ public record IncidentResponseDTO(
 		@Schema(description = "Creation timestamp in UTC", example = "2026-09-20T10:00:00Z")
 		Instant createdAt,
 		@Schema(description = "Last modification timestamp in UTC", example = "2026-09-20T10:15:00Z")
-		Instant updatedAt) {
+		Instant updatedAt,
+		@Schema(description = "Explicitly associated KnowledgeBase UUID, or null", nullable = true)
+		UUID knowledgeBaseId) {
 }

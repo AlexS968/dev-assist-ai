@@ -1,0 +1,17 @@
+@baseUrl = http://localhost:8080
+
+### Create an empty KnowledgeBase for one service
+POST {{baseUrl}}/api/v1/knowledge-bases
+Content-Type: application/json
+
+{"key":"checkout-service","name":"Checkout Service","description":"Operational runbooks"}
+
+> {%
+    if (response.status === 201) client.global.set("knowledgeBaseId", response.body.id);
+%}
+
+### Get a KnowledgeBase
+GET {{baseUrl}}/api/v1/knowledge-bases/{{knowledgeBaseId}}
+
+### List KnowledgeBases
+GET {{baseUrl}}/api/v1/knowledge-bases?page=0&size=20

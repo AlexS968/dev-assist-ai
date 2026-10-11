@@ -1,8 +1,6 @@
 # Current Architecture
 
-This document describes the architecture through the first infrastructure step of Phase 2.
-It intentionally shows only existing components. Planned AI capabilities are
-documented in the project roadmap and are not presented as implemented.
+This document describes the current modular application and RAG storage foundation.
 
 ## Runtime architecture
 
@@ -67,8 +65,10 @@ It does not contain Maven, source code, or build tools.
 
 - Spring Boot application;
 - incident REST API and persistence;
-- OpenAI adapter behind an application-owned analysis gateway (not invoked by REST);
-- PostgreSQL persistence infrastructure;
+- OpenAI and Ollama adapters behind the incident analysis endpoint;
+- PostgreSQL persistence infrastructure with pgvector extension;
+- isolated KnowledgeBase, document and chunk persistence, with a minimal KnowledgeBase REST API;
+- optional explicit Incident–KnowledgeBase association and exact vector retrieval service;
 - Flyway schema migrations;
 - Actuator health endpoints;
 - Docker Compose development database;
@@ -80,11 +80,7 @@ It does not contain Maven, source code, or build tools.
 
 The following components are not implemented yet:
 
-- analysis service orchestration and REST endpoint;
-- live LLM integration validation;
-- structured AI output;
-- embeddings and vector search;
-- retrieval-augmented generation;
+- final RAG evaluation and calibration;
 - operational tools;
 - MCP;
 - agentic workflow;
@@ -94,3 +90,5 @@ They will be added incrementally when their product use cases are implemented.
 
 See [AI infrastructure](ai-integration.md) for configuration, component boundaries,
 offline tests, and the remaining validation work.
+
+See [RAG storage boundaries and pending pipeline](rag.md).
