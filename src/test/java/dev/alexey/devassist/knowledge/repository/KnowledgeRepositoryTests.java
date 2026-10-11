@@ -216,9 +216,11 @@ class KnowledgeRepositoryTests {
     }
     @Test void documentUpdateChangesUpdatedAtAndPreservesCreatedAt() {
         KnowledgeDocument document = document(base("payments"), "runbook");
-        Instant created = document.getCreatedAt();
-        document.update("Revised", document.getSourceType(), document.getSourceUri(), document.getContentHash());
-        documents.saveAndFlush(document);
+        entityManager.clear();
+        KnowledgeDocument persisted = documents.findById(document.getId()).orElseThrow();
+        Instant created = persisted.getCreatedAt();
+        persisted.update("Revised", persisted.getSourceType(), persisted.getSourceUri(), persisted.getContentHash());
+        documents.saveAndFlush(persisted);
         entityManager.clear();
         KnowledgeDocument loaded = documents.findById(document.getId()).orElseThrow();
         assertThat(loaded.getTitle()).isEqualTo("Revised");
