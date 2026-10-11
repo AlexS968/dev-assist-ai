@@ -23,8 +23,8 @@ class LiveRagSmokeReportTests {
                 "\"providedContextChunkCount\":0",
                 "\"citationCount\":0",
                 "\"similarityThreshold\":0.7",
-                "Expected context not found");
-        assertThat(json).doesNotContain("gpt-6-luna", "SECRET_KEY", "INCIDENT_CONTENT",
+                "Expected context not found")
+                .doesNotContain("gpt-6-luna", "SECRET_KEY", "INCIDENT_CONTENT",
                 "inputTokens", "outputTokens", "prompt", "citations");
     }
 }

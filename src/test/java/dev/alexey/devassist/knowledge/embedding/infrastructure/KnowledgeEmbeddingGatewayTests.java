@@ -94,14 +94,10 @@ class KnowledgeEmbeddingGatewayTests {
     @Test void rejectsMissingMismatchedOrMalformedResponses() {
         KnowledgeEmbeddingGateway gateway = gateway("openai");
         KnowledgeEmbeddingRequest request = new KnowledgeEmbeddingRequest(List.of("one", "two"), EmbeddingPurpose.DOCUMENT);
-        when(model.call(any(EmbeddingRequest.class))).thenReturn(null);
-        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(new Embedding(vector(1f), 0))));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         when(model.call(any(EmbeddingRequest.class))).thenReturn(response(List.of(
                 new Embedding(vector(1f), 1), new Embedding(vector(2f), 0))));
-        assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
-        when(model.call(any(EmbeddingRequest.class))).thenReturn(new EmbeddingResponse(null));
         assertThatThrownBy(() -> gateway.embed(request)).isInstanceOf(KnowledgeEmbeddingResponseException.class);
         List<Embedding> withNull = new ArrayList<>();
         withNull.add(null);

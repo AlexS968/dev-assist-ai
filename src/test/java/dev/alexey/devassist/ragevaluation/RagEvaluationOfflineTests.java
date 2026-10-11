@@ -4,6 +4,7 @@ import dev.alexey.devassist.analysis.grounding.IncidentAnalysisCitationResolver;
 import dev.alexey.devassist.analysis.grounding.IncidentAnalysisContextSelector;
 import dev.alexey.devassist.analysis.model.StructuredIncidentAnalysis;
 import dev.alexey.devassist.knowledge.entity.KnowledgeBase;
+import dev.alexey.devassist.knowledge.entity.KnowledgeDocument;
 import dev.alexey.devassist.knowledge.ingestion.KnowledgeDocumentIngestionService;
 import dev.alexey.devassist.knowledge.repository.KnowledgeBaseRepository;
 import dev.alexey.devassist.knowledge.repository.KnowledgeChunkRepository;
@@ -47,8 +48,8 @@ class RagEvaluationOfflineTests {
         for (RagEvaluationScenario scenario : RagEvaluationCorpus.SCENARIOS) {
             assertThat(ids.add(scenario.scenarioId())).isTrue();
             assertThat(RagEvaluationCorpus.DOCUMENTS).containsKey(scenario.knowledgeBaseKey());
-            assertThat(scenario.expectedRelevantExternalIds()).isSubsetOf(externalIds);
-            assertThat(scenario.forbiddenExternalIds()).isSubsetOf(externalIds);
+            assertThat(externalIds).containsAll(scenario.expectedRelevantExternalIds());
+            assertThat(externalIds).containsAll(scenario.forbiddenExternalIds());
             assertThat(scenario.expectedRelevantExternalIds())
                     .doesNotContainAnyElementsOf(scenario.forbiddenExternalIds());
         }
@@ -80,9 +81,9 @@ class RagEvaluationOfflineTests {
                 document.getKnowledgeBase().getId().equals(order.getId())).toList();
         assertThat(paymentDocuments).hasSize(4);
         assertThat(orderDocuments).hasSize(2);
-        assertThat(paymentDocuments).extracting(document -> document.getExternalId())
+        assertThat(paymentDocuments).extracting(KnowledgeDocument::getExternalId)
                 .doesNotContain("order-database-runbook", "order-pool-capacity");
-        assertThat(orderDocuments).extracting(document -> document.getExternalId())
+        assertThat(orderDocuments).extracting(KnowledgeDocument::getExternalId)
                 .doesNotContain("payment-pool-runbook");
         var injection = chunks.findAll().stream().filter(chunk ->
                 chunk.getContent().contains("EVALUATION_INJECTION_MARKER")).findFirst().orElseThrow();

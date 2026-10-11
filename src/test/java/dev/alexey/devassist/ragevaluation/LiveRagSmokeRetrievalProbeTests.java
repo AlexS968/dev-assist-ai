@@ -26,8 +26,8 @@ class LiveRagSmokeRetrievalProbeTests {
         assertThat(json).contains("\"similarityThreshold\":0.7", "\"externalId\":\"runbook\"",
                 "\"externalId\":\"architecture\"", "\"similarity\":0.72",
                 "\"similarity\":0.68", "\"matchesAboveThreshold\":1",
-                "\"contextEligibleChunkCount\":1");
-        assertThat(json).doesNotContain("SECRET_CHUNK", "SECOND_CHUNK", "SECRET_TITLE",
+                "\"contextEligibleChunkCount\":1")
+                .doesNotContain("SECRET_CHUNK", "SECOND_CHUNK", "SECRET_TITLE",
                 "SECRET_URI", "SECRET_METADATA", "\"query\":", "prompt", "vector");
     }
 
@@ -48,8 +48,8 @@ class LiveRagSmokeRetrievalProbeTests {
         String json = Files.readString(output);
         assertThat(json).contains("\"status\":\"FAILED\"", "NO_RELEVANT_CONTEXT",
                 "\"externalId\":\"runbook\"", "\"similarity\":0.62",
-                "\"similarityThreshold\":0.7", "\"matchesAboveThreshold\":0");
-        assertThat(json).doesNotContain("SECRET_KEY", "INCIDENT_CONTENT", "SECRET_CHUNK",
+                "\"similarityThreshold\":0.7", "\"matchesAboveThreshold\":0")
+                .doesNotContain("SECRET_KEY", "INCIDENT_CONTENT", "SECRET_CHUNK",
                 "stackTrace", "prompt");
     }
 

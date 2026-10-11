@@ -41,8 +41,8 @@ public record KnowledgeEmbeddingVector(float[] values) {
 
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof KnowledgeEmbeddingVector vector
-                && Arrays.equals(values, vector.values);
+        return this == other || other instanceof KnowledgeEmbeddingVector(float[] otherValues)
+                && Arrays.equals(values, otherValues);
     }
 
     @Override

@@ -38,7 +38,7 @@ class LiveRagProviderConfigurationTests {
             assertThat(properties).containsEntry("app.ai.provider", "openai")
                     .containsEntry("app.rag.embedding.provider", "openai")
                     .containsEntry("spring.ai.openai.base-url", LiveRagProviderConfiguration.OPENAI_BASE_URL);
-            assertThat(properties.get("spring.ai.openai.api-key")).isEqualTo(secret);
+            assertThat(properties).containsEntry("spring.ai.openai.api-key", secret);
             assertThat(appender.list).noneMatch(event -> event.getFormattedMessage().contains(secret));
         } finally {
             logger.detachAppender(appender);
@@ -51,10 +51,9 @@ class LiveRagProviderConfigurationTests {
         Map<String, Object> registered = new HashMap<>();
         LiveRagProviderConfiguration.register(Map.of("RAG_LIVE_PROVIDER", "openai",
                 "OPENAI_API_KEY", secret), (name, supplier) -> registered.put(name, supplier.get()));
-        assertThat(registered.get("spring.ai.openai.api-key")).isEqualTo(secret);
-        assertThat(registered.get("spring.ai.openai.base-url"))
-                .isEqualTo("https://api.openai.com/v1")
-                .isNotEqualTo("http://127.0.0.1:1");
+        assertThat(registered).containsEntry("spring.ai.openai.api-key", secret)
+                .containsEntry("spring.ai.openai.base-url", "https://api.openai.com/v1")
+                .doesNotContainEntry("spring.ai.openai.base-url", "http://127.0.0.1:1");
     }
 
     @Test void openaiEmbeddingOptionsUseEnvironmentKeyAndOfficialEndpoint() {

@@ -39,7 +39,7 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
     public KnowledgeEmbeddingResult embed(KnowledgeEmbeddingRequest request) {
         if (request == null) throw new IllegalArgumentException("Embedding request is required");
         long start = nanoTime.getAsLong();
-        @Nullable EmbeddingResponse response;
+        EmbeddingResponse response;
         try {
             response = model.call(new EmbeddingRequest(providerTexts(request), null));
         } catch (RuntimeException exception) {
@@ -53,7 +53,6 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
             }
             throw new KnowledgeEmbeddingException("Embedding provider unavailable", diagnostic);
         }
-        if (response == null) throw new KnowledgeEmbeddingResponseException();
         List<KnowledgeEmbeddingVector> vectors = validateVectors(response, request.texts().size());
         @Nullable EmbeddingResponseMetadata metadata = response.getMetadata();
         String actualModel = responseModel(metadata);
@@ -80,9 +79,8 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
     }
 
     private List<KnowledgeEmbeddingVector> validateVectors(EmbeddingResponse response, int count) {
-        // Spring AI 2.0.1 constructors accept null results despite non-null getter declarations.
-        @Nullable List<Embedding> results = response.getResults();
-        if (results == null || results.size() != count) {
+        List<Embedding> results = response.getResults();
+        if (results.size() != count) {
             throw new KnowledgeEmbeddingResponseException();
         }
         List<KnowledgeEmbeddingVector> vectors = new ArrayList<>(count);

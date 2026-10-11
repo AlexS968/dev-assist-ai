@@ -38,14 +38,7 @@ public class KnowledgeDocumentNormalizer {
         return end == line.length() ? line : line.substring(0, end);
     }
 
-    private int fenceRun(String line) {
-        if (line.isEmpty() || (line.charAt(0) != '`' && line.charAt(0) != '~')) return 0;
-        int index = 0;
-        while (index < line.length() && line.charAt(index) == line.charAt(0)) index++;
-        return index;
-    }
-
-    private final class FenceState {
+    private static final class FenceState {
         private boolean active;
         private char marker;
         private int length;
@@ -60,6 +53,13 @@ public class KnowledgeDocumentNormalizer {
                 marker = line.charAt(0);
                 length = run;
             }
+        }
+
+        private int fenceRun(String line) {
+            if (line.isEmpty() || (line.charAt(0) != '`' && line.charAt(0) != '~')) return 0;
+            int index = 0;
+            while (index < line.length() && line.charAt(index) == line.charAt(0)) index++;
+            return index;
         }
     }
 }
