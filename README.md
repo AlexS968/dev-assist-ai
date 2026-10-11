@@ -249,7 +249,13 @@ Local defaults are provided for development:
 | `RAG_EMBEDDING_MAX_CHUNKS_PER_RUN` | `500` (1–10000) |
 | `RAG_RETRIEVAL_TOP_K` | `5` (1–`RAG_RETRIEVAL_MAX_TOP_K`) |
 | `RAG_RETRIEVAL_MAX_TOP_K` | `20` (1–100) |
-| `RAG_RETRIEVAL_SIMILARITY_THRESHOLD` | `0.70` (0–1; calibrate on evaluation data) |
+| `RAG_RETRIEVAL_OPENAI_SIMILARITY_THRESHOLD` | `0.60` (0–1; selected when the embedding provider is OpenAI) |
+| `RAG_RETRIEVAL_OLLAMA_SIMILARITY_THRESHOLD` | `0.70` (0–1; selected when the embedding provider is Ollama) |
+
+Retrieval chooses the threshold from the active embedding provider, independently
+of the chat provider. A retrieval request can override it explicitly. These
+defaults are provisional observations from a small fictional corpus and need
+recalibration on a larger representative dataset.
 
 The database defaults are intended only for the local Docker Compose database. Deployed
 environments must provide their own credentials through environment variables or
@@ -456,7 +462,7 @@ See the [structured contract](docs/architecture/structured-incident-analysis.md)
 - schema validity cannot establish factual correctness; 1000 tokens can still truncate output;
 - timeout expiry itself is tested without network I/O;
 - no authentication or authorization;
-- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval and optional Incident association exist, but public upload API, automatic embedding and final RAG evaluation are pending;
+- RAG storage, ingestion, explicit embedding orchestration, exact vector retrieval, optional Incident association and an offline evaluation harness exist; public upload API, automatic embedding and live quality calibration are pending;
 - no operational tools;
 - no cloud deployment;
 - Docker Compose currently starts PostgreSQL only;
@@ -481,7 +487,7 @@ fix/flyway-configuration
 
 ### Grounded analysis (Phase 4 step 7)
 
-Incident analysis now performs exact retrieval before generation when `RAG_ENABLED=true` and the Incident is linked to a KnowledgeBase. Selected untrusted chunks are bounded by `RAG_MAX_CONTEXT_CHUNKS=5` and `RAG_MAX_CONTEXT_CHARS=6000`. The v3 structured response requires citation IDs; the backend validates them against sources actually sent, then returns citation metadata and a grounding status. `grounded=true` means at least one valid source reference, not proven factual correctness. Empty retrieval or retrieval failure continues ordinary analysis without context; chat errors retain 502/504 behavior. Retrieval can increase latency and cost. Embedding token usage is separate from generation usage. Analysis is not persisted. The 0.70 threshold requires evaluation. See [ADR-008](docs/adr/ADR-008-grounded-incident-analysis.md).
+Incident analysis now performs exact retrieval before generation when `RAG_ENABLED=true` and the Incident is linked to a KnowledgeBase. Selected untrusted chunks are bounded by `RAG_MAX_CONTEXT_CHUNKS=5` and `RAG_MAX_CONTEXT_CHARS=6000`. The v3 structured response requires citation IDs; the backend validates them against sources actually sent, then returns citation metadata and a grounding status. `grounded=true` means at least one valid source reference, not proven factual correctness. Empty retrieval or retrieval failure continues ordinary analysis without context; chat errors retain 502/504 behavior. Retrieval can increase latency and cost. Embedding token usage is separate from generation usage. Analysis is not persisted. Provider-specific thresholds remain provisional; see [ADR-008](docs/adr/ADR-008-grounded-incident-analysis.md).
 
 ## License
 
@@ -492,5 +498,15 @@ Phase 4 includes a fictional test-only corpus and deterministic offline checks.
 The optional OpenAI/Ollama live evaluation is excluded from normal builds and
 CI. See [RAG evaluation](docs/evaluation/rag-evaluation.md) for prerequisites,
 metrics, threshold sweep, report format and explicit run commands. The
-production retrieval threshold remains 0.70 until evaluated on a broader
-corpus.
+provisional retrieval thresholds are OpenAI 0.60 and Ollama 0.70, selected by
+the embedding provider. They need calibration on a larger corpus. The recorded
+OpenAI live run completed with `CONTEXT_PROVIDED`, one backend-validated `S1`
+citation and `grounded=true`; see the evaluation report for the exact results
+and limitations. The previously documented Ollama observations are separate.
+
+The live commands require only `RAG_LIVE_PROVIDER=ollama` or
+`RAG_LIVE_PROVIDER=openai` plus `OPENAI_API_KEY` for OpenAI. Ollama must
+already be running with `qwen3:14b` and `nomic-embed-text` installed.
+Testcontainers starts PostgreSQL; the test starts Spring Boot. A successful
+live run writes `target/rag-evaluation/{provider}-report.json`; `Tests run: 0`
+indicates a configuration error.

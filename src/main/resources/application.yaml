@@ -50,7 +50,8 @@ app:
     retrieval:
       top-k: ${RAG_RETRIEVAL_TOP_K:5}
       max-top-k: ${RAG_RETRIEVAL_MAX_TOP_K:20}
-      similarity-threshold: ${RAG_RETRIEVAL_SIMILARITY_THRESHOLD:0.70}
+      openai-similarity-threshold: ${RAG_RETRIEVAL_OPENAI_SIMILARITY_THRESHOLD:0.60}
+      ollama-similarity-threshold: ${RAG_RETRIEVAL_OLLAMA_SIMILARITY_THRESHOLD:0.70}
     grounding:
       max-context-chars: ${RAG_MAX_CONTEXT_CHARS:6000}
       max-chunks: ${RAG_MAX_CONTEXT_CHUNKS:5}

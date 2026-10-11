@@ -210,9 +210,11 @@
 			<build><plugins><plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<configuration>
+				<configuration combine.self="override">
 					<groups>live-rag</groups>
-					<excludedGroups/>
+					<test>LiveRagEvaluationTests</test>
+					<failIfNoTests>true</failIfNoTests>
+					<failIfNoSpecifiedTests>true</failIfNoSpecifiedTests>
 				</configuration>
 			</plugin></plugins></build>
 		</profile>

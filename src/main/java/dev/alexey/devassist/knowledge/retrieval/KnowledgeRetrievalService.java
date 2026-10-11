@@ -50,7 +50,7 @@ public class KnowledgeRetrievalService {
         if (request == null) throw new IllegalArgumentException("Retrieval request is required");
         int topK = request.topK() == null ? properties.topK() : request.topK();
         double threshold = request.similarityThreshold() == null
-                ? properties.similarityThreshold() : request.similarityThreshold();
+                ? properties.thresholdFor(profile) : request.similarityThreshold();
         if (topK > properties.maxTopK()) throw new IllegalArgumentException("Retrieval topK exceeds configured maximum");
         if (!bases.existsById(request.knowledgeBaseId())) {
             throw new KnowledgeBaseNotFoundException(request.knowledgeBaseId());

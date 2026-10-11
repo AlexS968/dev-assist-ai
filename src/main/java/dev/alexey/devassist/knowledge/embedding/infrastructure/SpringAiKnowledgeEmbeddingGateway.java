@@ -8,13 +8,12 @@ import dev.alexey.devassist.knowledge.embedding.KnowledgeEmbeddingVector;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingException;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingResponseException;
 import dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingTimeoutException;
-import java.net.SocketTimeoutException;
-import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 import java.util.function.LongSupplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.embedding.Embedding;
@@ -24,6 +23,7 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.embedding.EmbeddingResponseMetadata;
 
 abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGateway {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SpringAiKnowledgeEmbeddingGateway.class);
     private final EmbeddingModel model;
     private final EmbeddingProfile profile;
     private final LongSupplier nanoTime;
@@ -42,8 +42,15 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
         try {
             response = model.call(new EmbeddingRequest(providerTexts(request), null));
         } catch (RuntimeException exception) {
-            if (isTimeout(exception)) throw new KnowledgeEmbeddingTimeoutException();
-            throw new KnowledgeEmbeddingException("Embedding provider unavailable");
+            var diagnostic = EmbeddingFailureDiagnostics.classify(exception, profile.provider());
+            LOGGER.warn("Knowledge embedding failed: provider={}, category={}, httpStatus={}, providerErrorCode={}",
+                    diagnostic.provider(), diagnostic.category(), diagnostic.httpStatus(),
+                    diagnostic.providerErrorCode());
+            if (diagnostic.category()
+                    == dev.alexey.devassist.knowledge.embedding.exception.KnowledgeEmbeddingDiagnostic.Category.TIMEOUT) {
+                throw new KnowledgeEmbeddingTimeoutException(diagnostic);
+            }
+            throw new KnowledgeEmbeddingException("Embedding provider unavailable", diagnostic);
         }
         List<KnowledgeEmbeddingVector> vectors = validateVectors(response, request.texts().size());
         EmbeddingResponseMetadata metadata = response.getMetadata();
@@ -82,13 +89,4 @@ abstract class SpringAiKnowledgeEmbeddingGateway implements KnowledgeEmbeddingGa
         return List.copyOf(vectors);
     }
 
-    private boolean isTimeout(Throwable failure) {
-        Throwable cause = failure;
-        while (cause != null) {
-            if (cause instanceof SocketTimeoutException || cause instanceof HttpTimeoutException
-                    || cause instanceof TimeoutException) return true;
-            cause = cause.getCause();
-        }
-        return false;
-    }
 }

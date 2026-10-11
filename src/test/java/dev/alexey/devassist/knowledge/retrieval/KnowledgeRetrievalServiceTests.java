@@ -28,7 +28,7 @@ class KnowledgeRetrievalServiceTests {
     private final KnowledgeVectorSearchRepository search = mock(KnowledgeVectorSearchRepository.class);
     private final KnowledgeEmbeddingGateway gateway = mock(KnowledgeEmbeddingGateway.class);
     private final AtomicLong time = new AtomicLong();
-    private final RetrievalProperties properties = new RetrievalProperties(5, 20, 0.70);
+    private final RetrievalProperties properties = new RetrievalProperties(5, 20, 0.60, 0.70);
 
     private KnowledgeRetrievalService service() {
         return new KnowledgeRetrievalService(bases, search, gateway, profile, properties,
@@ -103,6 +103,19 @@ class KnowledgeRetrievalServiceTests {
         KnowledgeRetrievalService retrieval = service();
         assertThatThrownBy(() -> retrieval.retrieve(request(21, null)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test void openAiProfileUsesOpenAiThresholdAndRequestOverrideWins() {
+        EmbeddingProfile openAiProfile = new EmbeddingProfile("openai", "text-embedding-3-small", 768);
+        when(bases.existsById(baseId)).thenReturn(true);
+        when(search.hasCompatibleEmbeddings(baseId, openAiProfile)).thenReturn(true);
+        when(gateway.embed(any())).thenReturn(response("openai", "text-embedding-3-small", 1));
+        var retrieval = new KnowledgeRetrievalService(bases, search, gateway, openAiProfile,
+                properties, () -> time.getAndAdd(2_000_000));
+        retrieval.retrieve(request(null, null));
+        verify(search).search(eq(baseId), eq(openAiProfile), any(float[].class), eq(5), eq(0.60));
+        retrieval.retrieve(request(null, 0.85));
+        verify(search).search(eq(baseId), eq(openAiProfile), any(float[].class), eq(5), eq(0.85));
     }
 
     @Test void providerFailureAndInvalidResponseNeverSearch() {
